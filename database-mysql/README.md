@@ -18,10 +18,11 @@ MYSQL_HOST=127.0.0.1 MYSQL_PASSWORD=ban pytest database-mysql/tests -q
 | Dosya | İçerik |
 |---|---|
 | `schema.sql` | (1) tablolar, FK'ler, CHECK kısıtları (2) EKP/marj, stok, mutabakat, KI sapma görünümleri (3) tetikleyiciler + saklı yordamlar |
-| `seed.sql` | (1) şartnamedeki zorunlu senaryo (ET-2026-001 → URT-2026-045 → SUC-2026-045 → Market A/B/C) (2) çoktan-çoğa lotlar, 2. kademe dağıtım, kuzu parçalama, POS satışı (3) model tahmini + gerçek + sapma. Takvim göreli: 20.09–15.10.2026 olayları, yükleme günü 16.10.2026 olacak şekilde kaydırılır (`@seed_shift`); demo hangi gün kurulsa olaylar geçmişte, SKT'ler anlamlı kalır |
+| `seed.sql` | (1) şartnamedeki zorunlu senaryo (ET-2026-001 → URT-2026-045 → SUC-2026-045 → Market A/B/C) (2) çoktan-çoğa lotlar, 2. kademe dağıtım, kuzu parçalama, POS satışı (3) model tahmini + gerçek + sapma. Takvim göreli: 20.09–15.10.2026 olayları, yükleme günü 16.10.2026 olacak şekilde kaydırılır (`@seed_shift`); demo hangi gün kurulsa olaylar geçmişte, SKT'ler anlamlı kalır. Prosedür ve tetikleyicilerin yazdığı stok hareketleri de belge zamanını alır (`SET TIMESTAMP`), böylece hareket raporundaki bakiye sırası doğru kalır. Orijinal takvim: `SEED_SHIFT=0 ./scripts/demo-reset.sh` |
 | `queries/*.sql` | Tek ifadelik WITH RECURSIVE sorgular (`?` parametreli; elle inceleme için, API aynı izlemeyi `sp_trace_*` yordamlarıyla yapar) |
 | `demo/recall_demo.sql` | Videodaki geri çağırma akışı, adım adım |
-| `demo/anomaly_demo.sql` | KI anomali uyarısı what-if demosu (`[DEMO]` önekli 2 uyarı; seed'e dahil değil) |
+| `demo/anomaly_demo.sql` | KI anomali uyarısı what-if demosu (`[DEMO]` önekli 2 uyarı; seed'e dahil değil). Seed uyarısızdır; API uyarıları kayıt anında yazar (verim, fire, alış fiyatı, reddedilen kasa satışı) |
+| `migrations/*.sql` | Var olan veritabanı için ek değişiklikler (kayıtları korur), tarih sırasıyla uygulanır; liste `docs/FEATURES.md` |
 | `tests/` | pytest + gerçek MySQL 8 entegrasyon testleri |
 
 ## Veri modeli

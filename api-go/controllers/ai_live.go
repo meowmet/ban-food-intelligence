@@ -14,8 +14,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"strings"
 	"time"
 )
+
+// predictionOrigin labels the forecasts this deployment writes (ml_prediction.data_origin): FIELD
+// only when DATA_ORIGIN=FIELD is set for a real operation, otherwise DEMO, so a missing setting
+// never claims field data. FIELD is not "verified": that needs the source document and a
+// verifier outside the app (ml-engine/audit_field.py).
+func predictionOrigin() string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("DATA_ORIGIN")), "FIELD") {
+		return "FIELD"
+	}
+	return "DEMO"
+}
 
 //go:embed aimodel/production_ridge.json
 var productionModelJSON []byte
@@ -212,8 +225,8 @@ func forecastOrder(o *orderInputs, m *ridgeModel) *ProductionForecastDto {
 // storeForecast writes the forecast and its baseline into ml_prediction (actual still empty).
 func storeForecast(ctx context.Context, q sqlRunner, orderID int64, fc *ProductionForecastDto) error {
 	const ins = `INSERT INTO ml_prediction (task, model_name, model_version, ref_type, ref_id, target_name,
-	             predicted_value, interval_low, interval_high, interval_level)
-	             VALUES (?, ?, ?, 'production_order', ?, ?, ?, ?, ?, ?)`
+	             predicted_value, interval_low, interval_high, interval_level, data_origin)
+	             VALUES (?, ?, ?, 'production_order', ?, ?, ?, ?, ?, ?, ?)`
 	rows := [][]interface{}{
 		{"PRODUCTION_YIELD", championModel, fc.ModelVersion, orderID, "actual_qty", fc.Packages, fc.PackagesLow, fc.PackagesHigh, fc.IntervalLevel},
 		{"PRODUCTION_EKP", championModel, fc.ModelVersion, orderID, "ekp", fc.EKP, fc.EKPLow, fc.EKPHigh, fc.IntervalLevel},
@@ -223,17 +236,18 @@ func storeForecast(ctx context.Context, q sqlRunner, orderID int64, fc *Producti
 			[]interface{}{"PRODUCTION_YIELD", baselineModel, "baseline-1", orderID, "actual_qty", fc.BaselinePackages, nil, nil, nil},
 			[]interface{}{"PRODUCTION_EKP", baselineModel, "baseline-1", orderID, "ekp", fc.BaselineEKP, nil, nil, nil})
 	}
+	origin := predictionOrigin()
 	for _, args := range rows {
-		if _, err := q.ExecContext(ctx, ins, args...); err != nil {
+		if _, err := q.ExecContext(ctx, ins, append(args, origin)...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// recordForecastActuals fills in the actual packages and EKP of a received order and flags the
-// package forecast as an anomaly when the actual is outside the 98 % band. Rows that already
-// carry an actual (the seeded ones) are left as they are.
+// recordForecastActuals fills in the actual packages and EKP of a received order, flags the
+// package forecast as an anomaly when the actual is outside the 98 % band and raises the alert
+// (alerts.go). Rows that already carry an actual (the seeded ones) are left as they are.
 func recordForecastActuals(ctx context.Context, q sqlRunner, orderNo string) error {
 	o, err := loadOrderInputs(ctx, q, orderNo)
 	if err != nil {
@@ -256,11 +270,13 @@ func recordForecastActuals(ctx context.Context, q sqlRunner, orderNo string) err
 		return nil
 	}
 	band := o.in.MeatKg * productionModel.HalfWidth["98"] / 100 / o.in.PackSizeKg
-	_, err = q.ExecContext(ctx,
+	if _, err = q.ExecContext(ctx,
 		`UPDATE ml_prediction SET is_anomaly = (ABS(actual_value - predicted_value) > ?)
 		 WHERE ref_type = 'production_order' AND ref_id = ? AND model_name = ? AND target_name = 'actual_qty'
-		   AND is_anomaly IS NULL`, band, o.orderID, championModel)
-	return err
+		   AND is_anomaly IS NULL`, band, o.orderID, championModel); err != nil {
+		return err
+	}
+	return raiseProductionAlert(ctx, q, o, band)
 }
 
 // loadForecasts returns the stored production forecasts (seeded and live) by order number.

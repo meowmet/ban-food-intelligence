@@ -13,6 +13,7 @@ type AssessmentPrediction struct {
 	Model     string   `json:"model"`
 	Predicted float64  `json:"predicted"`
 	Actual    *float64 `json:"actual"`
+	Origin    string   `json:"origin"` // SEED | DEMO | FIELD
 }
 
 type AssessmentReport struct {
@@ -104,6 +105,9 @@ func loadAssessment(r *http.Request, q sqlRunner, order, root, rejected, posted 
 		return nil, err
 	}
 	if err = tc.loadLinks(r, &out.Trace); err != nil {
+		return nil, err
+	}
+	if out.Trace.MassBalance, err = loadMassBalance(ctx, q, out.Trace.Lots); err != nil {
 		return nil, err
 	}
 	out.Backward = TraceResponse{RootLotNumber: p.OutputLotNumber, Direction: "backward", Lots: []TraceLotDto{}, Links: []TraceLinkDto{}}
@@ -209,7 +213,7 @@ func assessmentButchery(r *http.Request, q sqlRunner, op string) (*ButcheryOpera
 }
 
 func assessmentPredictions(ctx context.Context, q sqlRunner, order, op string) ([]AssessmentPrediction, error) {
-	rows, err := q.QueryContext(ctx, `SELECT COALESCE(po.order_no,bo.op_no),mp.target_name,mp.model_name,mp.predicted_value,mp.actual_value
+	rows, err := q.QueryContext(ctx, `SELECT COALESCE(po.order_no,bo.op_no),mp.target_name,mp.model_name,mp.predicted_value,mp.actual_value,mp.data_origin
         FROM ml_prediction mp
         LEFT JOIN production_order po ON mp.ref_type='production_order' AND po.id=mp.ref_id
         LEFT JOIN butchery_operation bo ON mp.ref_type='butchery_operation' AND bo.id=mp.ref_id
@@ -222,7 +226,7 @@ func assessmentPredictions(ctx context.Context, q sqlRunner, order, op string) (
 	for rows.Next() {
 		var p AssessmentPrediction
 		var actual sql.NullFloat64
-		if err = rows.Scan(&p.Reference, &p.Target, &p.Model, &p.Predicted, &actual); err != nil {
+		if err = rows.Scan(&p.Reference, &p.Target, &p.Model, &p.Predicted, &actual, &p.Origin); err != nil {
 			return nil, err
 		}
 		if actual.Valid {

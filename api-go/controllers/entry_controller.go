@@ -205,6 +205,7 @@ func (c *EntryController) Purchase(w http.ResponseWriter, r *http.Request) {
 		out.Lines = append(out.Lines, PurchaseResultLineDto{LotNo: l.LotNo, SKU: l.SKU, Qty: l.Qty, UnitPrice: l.UnitPrice,
 			LineTotal: float64(cents) / 100, ExpiryDate: l.ExpiryDate})
 	}
+	logAlertError("purchase "+req.ReceiptNo, raisePurchaseCostAlerts(ctx, tx, receiptID))
 	if err := tx.Commit(); err != nil {
 		writeDBError(w, r, err)
 		return
@@ -266,8 +267,9 @@ type ButcheryOperationResultDto struct {
 	AllocationMethod string                          `json:"allocation_method"`
 	WeightCheck      WeightCheckDto                  `json:"weight_check"`
 	Allocation       ButcheryKeyResultDto            `json:"allocation"`
-	Comparison       map[string]ButcheryKeyResultDto `json:"allocation_by_key"`  // both keys, for the decision
-	Forecast         *ButcheryForecastDto            `json:"forecast,omitempty"` // AI 4B: expected vs recorded part weights
+	Comparison       map[string]ButcheryKeyResultDto `json:"allocation_by_key"`         // both keys, for the decision
+	Forecast         *ButcheryForecastDto            `json:"forecast,omitempty"`        // AI 4B: expected vs recorded part weights
+	FrozenForecast   *FrozenButcheryDto              `json:"frozen_forecast,omitempty"` // frozen before weighing, with the recorded weights
 }
 
 // allocateButchery spreads totalCents over the outputs with the chosen key. Waste carries no
@@ -357,7 +359,8 @@ func validateButchery(req *ButcheryOperationRequest) fieldErrors {
 // (input kg x price + documented extra cost) is allocated with the chosen key; the response
 // also shows the other key so the two can be compared. On success: operation POSTED, one
 // lot per cut/by-product with its allocated unit cost, BUTCHERY_CONSUME / BUTCHERY_OUTPUT
-// movements and lot_link rows from the carcass lot to every part lot.
+// movements and lot_link rows from the carcass lot to every part lot. A forecast frozen for the
+// carcass is linked to the operation and returned with the recorded weights (frozen_forecast).
 func (c *EntryController) ButcheryOperation(w http.ResponseWriter, r *http.Request) {
 	var req ButcheryOperationRequest
 	if !decodeJSON(w, r, &req) {
@@ -487,6 +490,17 @@ func (c *EntryController) ButcheryOperation(w http.ResponseWriter, r *http.Reque
 		in.OpDate, _ = time.Parse("2006-01-02", req.OpDate)
 		result.Forecast = forecastButchery(in, butcheryForecastModel)
 		applyButcheryActuals(result.Forecast, req.Outputs)
+		frozen, err := loadFrozenButchery(ctx, tx, req.InputLotNo, in.Species)
+		if err != nil {
+			writeDBError(w, r, err)
+			return
+		}
+		if frozen != nil && frozen.OpNo == "" {
+			applyButcheryActuals(frozen.Forecast, req.Outputs)
+			same := math.Abs(frozen.InputWeightKg-req.InputWeightKg) < 0.0005
+			frozen.InputMatches = &same
+			result.FrozenForecast = frozen
+		}
 	}
 	if req.DryRun {
 		result.Status = "DRY_RUN"
@@ -547,10 +561,20 @@ func (c *EntryController) ButcheryOperation(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	if f := result.FrozenForecast; f != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE butchery_forecast SET operation_id = ? WHERE id = ?`, opID, f.id); err != nil {
+			writeDBError(w, r, err)
+			return
+		}
+		f.OpNo = req.OpNo
+	}
 	if result.Forecast != nil {
 		if err := storeButcheryForecast(ctx, tx, opID, result.Forecast); err != nil {
 			writeDBError(w, r, err)
 			return
+		}
+		if a := butcheryAlert(opID, result.Forecast, req.PurchaseUnitPrice, loadThresholds(ctx, tx)["BUTCHERY_YIELD"]); a != nil {
+			logAlertError("butchery "+req.OpNo, insertAlert(ctx, tx, *a))
 		}
 	}
 	if err := tx.Commit(); err != nil {

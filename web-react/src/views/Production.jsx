@@ -3,6 +3,7 @@ import { useApi } from '../lib/api';
 import { useLang } from '../lib/i18n';
 import { Async, Group, Kpi, Mono, Page, Pill, Table } from '../lib/ui';
 import { ForecastKpis, ProductionOrderForm, ReceiveProductionForm } from './Entry';
+import { LotLink } from './LotPanel';
 
 const isOpen = (o) => o.status === 'PLANNED' || o.status === 'MATERIAL_SENT';
 
@@ -79,7 +80,7 @@ function ReceivedOrder({ o }) {
       <Table
         rows={o.breakdown || []}
         columns={[
-          { key: 'lot_no', label: `${t('lot')} / ${t('document')}`, render: (r) => <Mono>{r.lot_no || '–'}</Mono> },
+          { key: 'lot_no', label: `${t('lot')} / ${t('document')}`, render: (r) => (r.is_service ? <Mono>{r.lot_no || '–'}</Mono> : <LotLink lot={r.lot_no} />) },
           { key: 'cost_element', label: t('costElement') },
           { key: 'qty', label: t('qty'), align: 'num', render: (r) => fmt.qty(r.qty, r.uom_code) },
           { key: 'unit_cost', label: t('unitPrice'), align: 'num', render: (r) => fmt.money(r.unit_cost) },

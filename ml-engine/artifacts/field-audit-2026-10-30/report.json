@@ -1,0 +1,200 @@
+{
+  "status": "NO_VERIFIED_FIELD_PAIRS",
+  "model_versions": [
+    "ali-1.1.0"
+  ],
+  "field_metrics": {},
+  "field_exclusion_target_counts": {
+    "not_verified_field_data": 12
+  },
+  "invalid_pair_counts": {},
+  "operations": {
+    "butchery_operation:PRC-2026-001": {
+      "origin": "demo_seed",
+      "targets": [
+        {
+          "target": "but_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.055000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "fire_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.073000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "kaburga_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.065000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "kiyma_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.069000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "omuz_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.062000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "sirt_kg",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.057000Z",
+          "outcome_booked_at": "2026-10-26T09:45:00.000000Z",
+          "field_exclusion": "not_verified_field_data"
+        }
+      ],
+      "booking_time_is_only_an_operational_proxy": true
+    },
+    "production_order:URT-2026-045": {
+      "origin": "demo_seed",
+      "targets": [
+        {
+          "target": "actual_qty",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.045000Z",
+          "outcome_booked_at": "2026-10-29T17:07:27.924000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "ekp",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.048000Z",
+          "outcome_booked_at": "2026-10-29T17:07:27.924000Z",
+          "field_exclusion": "not_verified_field_data"
+        }
+      ],
+      "booking_time_is_only_an_operational_proxy": true
+    },
+    "production_order:URT-2026-046": {
+      "origin": "demo_seed",
+      "targets": [
+        {
+          "target": "actual_qty",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.050000Z",
+          "outcome_booked_at": "2026-10-29T17:07:27.963000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "ekp",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": false,
+          "model_predicted_at": "2026-10-29T17:07:28.052000Z",
+          "outcome_booked_at": "2026-10-29T17:07:27.963000Z",
+          "field_exclusion": "not_verified_field_data"
+        }
+      ],
+      "booking_time_is_only_an_operational_proxy": true
+    },
+    "production_order:URT-2026-047": {
+      "origin": "demo_manual",
+      "targets": [
+        {
+          "target": "actual_qty",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": true,
+          "model_predicted_at": "2026-10-29T17:11:48.388000Z",
+          "outcome_booked_at": "2026-10-29T17:11:48.519000Z",
+          "field_exclusion": "not_verified_field_data"
+        },
+        {
+          "target": "ekp",
+          "model_version": "ali-1.1.0",
+          "both_forecasts_before_inventory_booking": true,
+          "model_predicted_at": "2026-10-29T17:11:48.388000Z",
+          "outcome_booked_at": "2026-10-29T17:11:48.519000Z",
+          "field_exclusion": "not_verified_field_data"
+        }
+      ],
+      "booking_time_is_only_an_operational_proxy": true
+    }
+  },
+  "demo_diagnostic_metrics_NOT_FIELD": {
+    "butchery/recorded_parts_kg": {
+      "rows": 6,
+      "independent_operations": 1,
+      "model": {
+        "mae": 0.145167,
+        "rmse": 0.208256,
+        "bias_predicted_minus_actual": -0.000167,
+        "wape_pct": 3.484
+      },
+      "baseline": {
+        "mae": 0.036067,
+        "rmse": 0.043813,
+        "bias_predicted_minus_actual": -0.0,
+        "wape_pct": 0.8656
+      },
+      "model_minus_baseline_mae": 0.1091,
+      "interval_80_rows": 6,
+      "interval_80_coverage_pct": 66.666667
+    },
+    "production/actual_qty": {
+      "rows": 3,
+      "independent_operations": 3,
+      "model": {
+        "mae": 1.0,
+        "rmse": 1.409492,
+        "bias_predicted_minus_actual": 0.6,
+        "wape_pct": 1.2
+      },
+      "baseline": {
+        "mae": 1.1,
+        "rmse": 1.229781,
+        "bias_predicted_minus_actual": -0.000533,
+        "wape_pct": 1.32
+      },
+      "model_minus_baseline_mae": -0.1,
+      "interval_80_rows": 3,
+      "interval_80_coverage_pct": 66.666667
+    },
+    "production/ekp": {
+      "rows": 3,
+      "independent_operations": 3,
+      "model": {
+        "mae": 0.156433,
+        "rmse": 0.226011,
+        "bias_predicted_minus_actual": -0.1011,
+        "wape_pct": 0.843014
+      },
+      "baseline": {
+        "mae": 0.174067,
+        "rmse": 0.193835,
+        "bias_predicted_minus_actual": -0.006933,
+        "wape_pct": 0.938039
+      },
+      "model_minus_baseline_mae": -0.017634,
+      "interval_80_rows": 3,
+      "interval_80_coverage_pct": 66.666667
+    }
+  },
+  "notes": [
+    "No claim of field accuracy or business benefit is made from demo rows.",
+    "Six part rows from one carcass are one independent operation, not six field cases.",
+    "Inventory booking time does not establish when a human first knew the outcome.",
+    "No statistical significance, real-data sample-size guarantee or deployment approval is inferred."
+  ],
+  "snapshot_sha256": "e16314734ab1081b8074a7d4f807a664f64fc1af85920afe08e13546ff31e509",
+  "origins_sha256": "0ae527d82e36ceca0de4596b156bdc847cabc4bc894d5eecb6bec97e56aebb52"
+}

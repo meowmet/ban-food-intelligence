@@ -63,3 +63,37 @@ func (c *LotController) ListStockByLot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(list)
 }
+
+type WarehouseDto struct {
+	Code          string `json:"code"`
+	Name          string `json:"name"`
+	WarehouseType string `json:"warehouse_type"` // MAIN, COLD, STORE, QUARANTINE, SUBCONTRACTOR
+}
+
+// Warehouses handles GET /warehouses: the stock locations a movement can name.
+func (c *LotController) Warehouses(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAPIError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", nil)
+		return
+	}
+	rows, err := c.db.QueryContext(r.Context(), `SELECT code, name, warehouse_type FROM warehouse ORDER BY id`)
+	if err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	defer rows.Close()
+	list := []WarehouseDto{}
+	for rows.Next() {
+		var d WarehouseDto
+		if err := rows.Scan(&d.Code, &d.Name, &d.WarehouseType); err != nil {
+			writeDBError(w, r, err)
+			return
+		}
+		list = append(list, d)
+	}
+	if err := rows.Err(); err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	writeJSON(w, list)
+}

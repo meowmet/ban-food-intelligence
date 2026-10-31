@@ -24,9 +24,11 @@ export async function createAssessmentPdf(report, { t, fmt }) {
   doc.setFont('NotoSans', 'normal');
   let y = 20;
   const page = () => { doc.addPage(); y = 20; };
+  // The bundled Noto Sans subset has no U+2212 minus sign: print it as a hyphen-minus.
+  const safe = (value) => String(value).replace(/−/g, '-');
   const text = (value, size = 10, weight = 'normal') => {
     doc.setFont('NotoSans', weight); doc.setFontSize(size); doc.setTextColor(30, 40, 50);
-    const lines = doc.splitTextToSize(String(value), 178);
+    const lines = doc.splitTextToSize(safe(value), 178);
     const step = size * 0.48;
     for (const line of lines) {
       if (y + step > 278) page();
@@ -38,7 +40,7 @@ export async function createAssessmentPdf(report, { t, fmt }) {
   const table = (head, body) => {
     if (!body.length) { text(t('noData')); return; }
     if (y > 253) page();
-    autoTable(doc, { startY: y, margin: { left: 16, right: 16, top: 18, bottom: 20 }, head: [head], body,
+    autoTable(doc, { startY: y, margin: { left: 16, right: 16, top: 18, bottom: 20 }, head: [head.map(safe)], body: body.map((r) => r.map(safe)),
       styles: { font: 'NotoSans', fontSize: 8, cellPadding: 2.4, overflow: 'linebreak', textColor: [30, 40, 50] },
       headStyles: { fillColor: [35, 91, 74], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [245, 248, 246] },
       rowPageBreak: 'avoid' });
@@ -79,6 +81,15 @@ export async function createAssessmentPdf(report, { t, fmt }) {
   table([t('lot'), t('product'), t('status')], trace.lots.map((l) => [l.lot_no, l.product_name, l.status]));
   table([t('document'), t('inputLot'), t('consumed'), t('outputLot2'), t('produced')], trace.links.map((l) =>
     [l.document_no, l.input_lot_no, fmt.qty(l.qty_consumed, l.input_uom), l.output_lot_no, fmt.qty(l.qty_produced, l.output_uom)]));
+  const mb = trace.mass_balance;
+  if (mb) {
+    text(`${t('mb_title')}: ${t(mb.balanced ? 'mb_balanced' : 'mb_gap')}`, 11, 'bold');
+    const q = (v, uom) => (Math.abs(v) > 0.0005 ? fmt.qty(v, uom) : '–');
+    table([t('lot'), t('mb_declared'), t('mb_used'), t('mb_shipped'), t('mb_sold'), t('mb_wasted'), t('mb_returned'), t('mb_inStock'), t('mb_unexplained')],
+      mb.lines.map((l) => [l.lot_no, fmt.qty(l.declared_qty, l.uom_code), q(l.used_in_lots, l.uom_code), q(l.shipped, l.uom_code), q(l.sold, l.uom_code),
+        q(l.wasted, l.uom_code), q(l.returned, l.uom_code), q(l.in_stock, l.uom_code), q(l.unexplained, l.uom_code)]));
+    text(t('mb_note'), 8);
+  }
   text(`${t('backward')}: ${report.backward.root_lot_number}`, 11, 'bold');
   table([t('lot'), t('product'), t('supplier')], report.backward.lots.map((l) =>
     [l.lot_no, l.product_name, [l.supplier_code, l.supplier_name].filter(Boolean).join(' · ') || '—']));
@@ -100,8 +111,8 @@ export async function createAssessmentPdf(report, { t, fmt }) {
     [`${m.task} / ${m.target}`, m.role === 'BASELINE' ? t('baseline') : t('model'), m.model,
       `${fmt.num(m.mae, 3)} ${m.unit}`, fmt.pct(m.mape_pct), fmt.num(m.n_rows, 0)]));
   text(t('report_predictions'), 11, 'bold');
-  table([t('reference'), t('type'), t('model'), t('qty'), t('actual')], report.predictions.map((m) =>
-    [m.reference, m.target, m.model, fmt.num(m.predicted, 3), fmt.num(m.actual, 3)]));
+  table([t('reference'), t('origin'), t('type'), t('model'), t('qty'), t('actual')], report.predictions.map((m) =>
+    [m.reference, m.origin ? t(`o_${m.origin}`) : '–', m.target, m.model, fmt.num(m.predicted, 3), fmt.num(m.actual, 3)]));
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i); doc.setFont('NotoSans', 'normal'); doc.setFontSize(7); doc.setTextColor(90);

@@ -8,7 +8,7 @@ report = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else 'web-react/test-resu
 reader = PdfReader(report)
 text = '\n'.join(page.extract_text() or '' for page in reader.pages)
 for expected in ('Değerlendirme raporu', '287,50', '63,50', 'kayıtsız', '18,16',
-                 'ET-2026-001', 'SUC-2026-045', 'Market A', 'Market B', 'Market C', 'sentetik'):
+                 'ET-2026-001', 'SUC-2026-045', 'Market A', 'Market B', 'Market C', 'sentetik', 'Kütle dengesi'):
     assert expected in text, f'Missing PDF evidence or unreadable Unicode text: {expected}'
 assert len(reader.pages) >= 3, 'Report should contain the full assessment evidence'
 print(f'PDF verified: {len(reader.pages)} pages, Turkish text and all required evidence present')

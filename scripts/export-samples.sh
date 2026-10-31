@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Exports the main seed records as JSON/CSV into docs/samples/ from the running API,
 # including the recall result for ET-2026-001, then restores the clean seed.
+# The export uses the seed's original calendar (20.09-15.10.2026), so the dates in the
+# samples do not depend on the export day.
 #
 #   ./scripts/export-samples.sh        (needs the compose stack; demo PIN from the README)
 set -euo pipefail
@@ -13,7 +15,7 @@ PY=$(command -v python3 || command -v python)
 pretty() { "$PY" -c "import json,sys; json.dump(json.load(sys.stdin), sys.stdout, ensure_ascii=False, indent=2); print()"; }
 get() { curl -fsS -H 'Accept-Language: en' "$API$1" | pretty > "$OUT/$2"; echo "  $OUT/$2"; }
 
-./scripts/demo-reset.sh >/dev/null 2>&1
+SEED_SHIFT=0 ./scripts/demo-reset.sh >/dev/null 2>&1
 echo ">> exporting seed records"
 get "/lots" lots-stock.json
 get "/purchases" purchases.json

@@ -304,6 +304,10 @@ func (c *SyncController) IngestOutbox(w http.ResponseWriter, r *http.Request) {
 					code = "INVALID_INPUT"
 				}
 				rejected = append(rejected, models.SyncRejectionDto{ID: item.Timestamp, Code: code, Message: messageFor(code, r)})
+				if code == "LOT_BLOCKED" || code == "LOT_EXPIRED" {
+					logAlertError("rejected sale "+item.Timestamp, raiseRejectedSaleAlert(r.Context(), c.db, item.BatchID, code,
+						item.Timestamp, deviceID, item.PredictedYield, uuidV7Time(item.Timestamp)))
+				}
 				continue
 			}
 		}

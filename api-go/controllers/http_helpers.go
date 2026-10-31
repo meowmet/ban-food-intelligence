@@ -25,7 +25,10 @@ var errorMessages = map[string]map[string]string{
 	"INSUFFICIENT_STOCK":  {"en": "Not enough stock for this lot.", "tr": "Bu lot için yeterli stok yok.", "de": "Nicht genügend Bestand für diese Charge."},
 	"LOT_BLOCKED":         {"en": "This lot is recalled or blocked. Sale blocked.", "tr": "Bu lot geri çağrıldı veya bloke. Satış engellendi.", "de": "Diese Charge ist zurückgerufen oder gesperrt. Verkauf gesperrt."},
 	"LOT_EXPIRED":         {"en": "This lot is past its expiry date. Sale blocked.", "tr": "Bu lotun son tüketim tarihi geçti. Satış engellendi.", "de": "Das Haltbarkeitsdatum dieser Charge ist überschritten. Verkauf gesperrt."},
+	"EXCEEDS_DELIVERED":   {"en": "More than the customer's recorded deliveries (minus onward deliveries and returns).", "tr": "Müşteriye kayıtlı teslimattan fazla (ileri sevk ve iadeler düşülür).", "de": "Mehr als die erfassten Lieferungen an den Kunden (abzüglich Weiterlieferungen und Rücknahmen)."},
 	"ORDER_STATE":         {"en": "The production order is not in the right state for this step.", "tr": "Üretim emri bu adım için uygun durumda değil.", "de": "Der Fertigungsauftrag ist für diesen Schritt nicht im richtigen Status."},
+	"FORECAST_FROZEN":     {"en": "A forecast is already frozen for this carcass; it cannot be replaced.", "tr": "Bu karkas için tahmin zaten donduruldu; değiştirilemez.", "de": "Für diesen Schlachtkörper ist bereits eine Prognose eingefroren; sie kann nicht ersetzt werden."},
+	"FORECAST_TOO_LATE":   {"en": "This carcass is already cut; a forecast can only be frozen before.", "tr": "Bu karkas zaten parçalandı; tahmin yalnızca önceden dondurulabilir.", "de": "Dieser Schlachtkörper ist bereits zerlegt; eine Prognose kann nur vorher eingefroren werden."},
 	"INVALID_PIN":         {"en": "Wrong PIN.", "tr": "PIN hatalı.", "de": "Falsche PIN."},
 	"LOCKED_OUT":          {"en": "Too many wrong attempts. Try again later.", "tr": "Çok fazla hatalı deneme. Daha sonra tekrar deneyin.", "de": "Zu viele Fehlversuche. Bitte später erneut versuchen."},
 	"SIGNATURE_REJECTED":  {"en": "The device signature was rejected.", "tr": "Cihaz imzası reddedildi.", "de": "Die Gerätesignatur wurde abgelehnt."},
@@ -94,6 +97,8 @@ func classifyDBError(err error) (int, string) {
 		return http.StatusConflict, "LOT_EXPIRED"
 	case strings.Contains(msg, "ORDER_STATE"):
 		return http.StatusConflict, "ORDER_STATE"
+	case strings.Contains(msg, "FORECAST_TOO_LATE"):
+		return http.StatusConflict, "FORECAST_TOO_LATE"
 	case strings.Contains(msg, "INVALID_INPUT"), strings.Contains(msg, "ACTUAL_QTY"), strings.Contains(msg, "MOVEMENT_SIGN"), strings.Contains(msg, "EXPIRY_REQUIRED"), strings.Contains(msg, "Check constraint"):
 		return http.StatusUnprocessableEntity, "INVALID_INPUT"
 	case strings.Contains(msg, "Duplicate entry"):

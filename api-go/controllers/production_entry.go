@@ -9,7 +9,8 @@ import (
 // External production order entry (spec Task 1): the order, the raw-material lots sent to the
 // subcontractor (each a TRANSFER_OUT/IN pair with its cost snapshot, via sp_production_send_input)
 // and the AI forecast of packages and EKP, in one transaction. Receiving the finished goods
-// stays POST /production.
+// stays POST /production. With dry_run the same checks and the forecast run inside the
+// transaction, which is then rolled back: a preview at decision time that writes nothing.
 
 type ProductionInputRequest struct {
 	LotNo string  `json:"lot_no"`
@@ -27,12 +28,13 @@ type ProductionOrderRequest struct {
 	FromWarehouse     string                   `json:"from_warehouse"` // default ANA-DEPO
 	SubWarehouse      string                   `json:"sub_warehouse"`  // default FASON-01
 	Notes             string                   `json:"notes"`
+	DryRun            bool                     `json:"dry_run"` // check + forecast, write nothing
 	Inputs            []ProductionInputRequest `json:"inputs"`
 }
 
 type ProductionOrderResultDto struct {
 	OrderNo      string                   `json:"order_no"`
-	Status       string                   `json:"status"`
+	Status       string                   `json:"status"` // MATERIAL_SENT | DRY_RUN
 	MaterialCost float64                  `json:"material_cost"`
 	Inputs       []ProductionInputRequest `json:"inputs"`
 	Forecast     *ProductionForecastDto   `json:"forecast"`
@@ -152,6 +154,15 @@ func (c *EntryController) ProductionOrder(w http.ResponseWriter, r *http.Request
 		return
 	}
 	fc := forecastOrder(o, productionModel)
+	result := ProductionOrderResultDto{
+		OrderNo: req.OrderNo, Status: "MATERIAL_SENT", MaterialCost: round(o.materialCost, 2), Inputs: req.Inputs, Forecast: fc,
+	}
+	if req.DryRun {
+		// the deferred rollback undoes the order and the dispatch; the forecast is not stored
+		result.Status = "DRY_RUN"
+		writeJSON(w, result)
+		return
+	}
 	if fc != nil {
 		if err := storeForecast(ctx, tx, o.orderID, fc); err != nil {
 			writeDBError(w, r, err)
@@ -164,7 +175,5 @@ func (c *EntryController) ProductionOrder(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, ProductionOrderResultDto{
-		OrderNo: req.OrderNo, Status: "MATERIAL_SENT", MaterialCost: round(o.materialCost, 2), Inputs: req.Inputs, Forecast: fc,
-	})
+	writeJSON(w, result)
 }

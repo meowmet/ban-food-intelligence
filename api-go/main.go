@@ -72,7 +72,10 @@ func main() {
 	// The POS only writes through /sync (ECDSA-signed) and /auth/supervisor/verify.
 	op := sessions.RequireOperator
 	movementsCtrl := controllers.NewMovementsController(db)
+	shipmentCtrl := controllers.NewShipmentController(db)
 	aiCtrl := controllers.NewAIController(db)
+	alertCtrl := controllers.NewAlertController(db)
+	countCtrl := controllers.NewStockCountController(db)
 
 	mux := http.NewServeMux()
 
@@ -96,7 +99,7 @@ func main() {
 	// Task 1: External Production & EKP Cost Calculation
 	mux.HandleFunc("/production", op(productionCtrl.ListOrders))
 	mux.HandleFunc("/production/orders", op(entryCtrl.ProductionOrder))
-	mux.HandleFunc("/purchases", purchasesHandler(reportsCtrl.Purchases, op(entryCtrl.Purchase)))
+	mux.HandleFunc("/purchases", getOrPost(reportsCtrl.Purchases, op(entryCtrl.Purchase)))
 
 	// Task 2: Whole Lamb Butchery & Cost Allocation
 	mux.HandleFunc("/butchery", butcheryCtrl.ReconcileButchery)
@@ -108,8 +111,11 @@ func main() {
 	mux.HandleFunc("/recall/contacts.csv", recallCtrl.ContactsCSV)
 	mux.HandleFunc("/recall/progress", recallCtrl.Progress)
 	mux.HandleFunc("/recall/followup", op(recallCtrl.Followup))
+	mux.HandleFunc("/shipments", getOrPost(shipmentCtrl.List, op(shipmentCtrl.Create)))
+	mux.HandleFunc("/customers", shipmentCtrl.Customers)
 	mux.HandleFunc("/trace/", traceCtrl.TraceHandler)
 	mux.HandleFunc("/lots", lotCtrl.ListStockByLot)
+	mux.HandleFunc("/warehouses", lotCtrl.Warehouses)
 
 	// Supervisor unlock of a recalled POS terminal (bcrypt, lockout, audit)
 	mux.HandleFunc("/auth/supervisor/verify", authCtrl.Verify)
@@ -126,11 +132,19 @@ func main() {
 	mux.HandleFunc("/movements/return", op(movementsCtrl.Return))
 	mux.HandleFunc("/movements/waste", op(movementsCtrl.Waste))
 	mux.HandleFunc("/rework", op(movementsCtrl.Rework))
+	mux.HandleFunc("/stock-counts", getOrPost(countCtrl.List, op(countCtrl.Create)))
 
 	// Task 4: ML Yield Predictions & Deviation Telemetry
 	mux.HandleFunc("/yield", yieldCtrl.PredictYield)
 	mux.HandleFunc("/ai/summary", aiCtrl.Summary)
 	mux.HandleFunc("/ai/forecast/butchery", aiCtrl.ButcheryForecast)
+	mux.HandleFunc("/ai/forecast/butchery/freeze", op(aiCtrl.FreezeButcheryForecast))
+
+	// Alert inbox: yield, purchase cost and refused POS sales; reviewed by a supervisor
+	mux.HandleFunc("/alerts", alertCtrl.List)
+	mux.HandleFunc("/alerts/review", op(alertCtrl.Review))
+	mux.HandleFunc("/alerts/rules", getOrPost(alertCtrl.Rules, op(alertCtrl.UpdateRule)))
+	mux.HandleFunc("/alerts/missed", op(alertCtrl.Missed))
 
 	// Offline Edge POS Synchronization (Hardware ECDSA P-256 + UUIDv7 Idempotency)
 	mux.HandleFunc("/sync", syncCtrl.IngestOutbox)
@@ -234,8 +248,8 @@ func withCORSAndLogging(next http.Handler) http.Handler {
 	})
 }
 
-// purchasesHandler serves GET /purchases (report) and POST /purchases (new receipt).
-func purchasesHandler(get, post http.HandlerFunc) http.HandlerFunc {
+// getOrPost serves a report (GET) and a new document (POST) on one path: /purchases, /shipments.
+func getOrPost(get, post http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			post(w, r)

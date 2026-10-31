@@ -42,6 +42,8 @@ services:
     environment:
       PORT: "8080"
       MYSQL_DSN: "root:ban@tcp(mysql:3306)/food_intel?parseTime=true&multiStatements=true&charset=utf8mb4"
+      # origin of the AI forecasts this API writes: DEMO here; FIELD only in a real operation
+      DATA_ORIGIN: "DEMO"
     ports:
       - "8080:8080"
     depends_on:

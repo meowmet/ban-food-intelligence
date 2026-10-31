@@ -78,7 +78,7 @@ type TraceSaleDto struct {
 }
 
 // TraceResponse: lots reached from the root lot plus the exact recorded relations.
-// Forward traces also list stock, shipments (buyers) and POS sales of every reached lot.
+// Forward traces also list stock, shipments (buyers), POS sales and the mass balance of every reached lot.
 type TraceResponse struct {
 	RootLotNumber string             `json:"root_lot_number"`
 	Direction     string             `json:"direction"`
@@ -87,6 +87,7 @@ type TraceResponse struct {
 	Stock         []TraceStockDto    `json:"stock,omitempty"`
 	Shipments     []TraceShipmentDto `json:"shipments,omitempty"`
 	Sales         []TraceSaleDto     `json:"sales,omitempty"`
+	MassBalance   *MassBalanceDto    `json:"mass_balance,omitempty"` // forward only
 }
 
 // TraceHandler handles GET /trace/{lotNumber}?direction=forward|backward
@@ -121,6 +122,12 @@ func (c *TraceController) TraceHandler(w http.ResponseWriter, r *http.Request) {
 	if err := c.loadLinks(r, &resp); err != nil {
 		writeDBError(w, r, err)
 		return
+	}
+	if direction == "forward" {
+		if resp.MassBalance, err = loadMassBalance(r.Context(), c.db, resp.Lots); err != nil {
+			writeDBError(w, r, err)
+			return
+		}
 	}
 	writeJSON(w, resp)
 }

@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { useApi } from '../lib/api';
 import { useLang } from '../lib/i18n';
-import { Async, Group, Mono, Page, Pill, Table } from '../lib/ui';
+import { Async, Group, Kpi, Mono, Page, Pill, Table } from '../lib/ui';
+
+// Two kinds of evidence, kept apart: the error on the synthetic held-out test (metrics) and
+// forecast vs actual on the records in this database, each labelled with its origin.
 
 export default function AI() {
   const { t } = useLang();
@@ -15,13 +18,25 @@ export default function AI() {
               <MapeChart metrics={s.metrics} baseline={s.baseline} />
             </Group>
             <MetricsTable metrics={s.metrics} />
-            <Comparisons rows={s.comparisons} />
+            <Comparisons rows={s.comparisons} records={s.records} />
           </>
         )}
       </Async>
     </Page>
   );
 }
+
+/**
+ * Verified field samples. The app cannot verify a record (that needs the source document and a
+ * verifier), so without field records the answer is 0 and with them it is decided outside the app.
+ */
+export function FieldSampleKpi({ records }) {
+  const { t } = useLang();
+  const field = records?.FIELD || 0;
+  return <Kpi label={t('ai_fieldVerified')} value={field ? '–' : '0'} sub={field ? t('ai_fieldOutside') : t('ai_fieldNone')} />;
+}
+
+const originPill = (t, origin) => (origin ? <Pill tone={origin === 'FIELD' ? 'warn' : 'neutral'}>{t(`o_${origin}`)}</Pill> : null);
 
 /** Horizontal bars: model vs baseline MAPE per target (2 validated hues, legend + direct labels + hover). */
 function MapeChart({ metrics, baseline }) {
@@ -90,7 +105,7 @@ function MapeChart({ metrics, baseline }) {
 function MetricsTable({ metrics }) {
   const { t, fmt } = useLang();
   return (
-    <Group title={`${t('mae')} / ${t('mape')}`}>
+    <Group title={t('ai_metricsTitle')}>
       <Table
         rows={metrics}
         columns={[
@@ -106,7 +121,7 @@ function MetricsTable({ metrics }) {
   );
 }
 
-function Comparisons({ rows }) {
+function Comparisons({ rows, records = {} }) {
   const { t, fmt } = useLang();
   const show = (r, v) => (v == null ? '–' : r.target === 'ekp' ? fmt.money(v) : r.target === 'actual_qty' ? fmt.num(v, 1) : fmt.qty(v, 'KG'));
   const dev = (v) => (v == null ? '' : ` (${v > 0 ? '+' : ''}${fmt.pct(v, 1)})`);
@@ -125,11 +140,16 @@ function Comparisons({ rows }) {
     });
   }
   return (
-    <Group title={t('predictions')} footer={level != null ? t('intervalNote') : undefined}>
+    <Group title={t('predictions')} footer={[level != null ? t('intervalNote') : null, t('originNote')].filter(Boolean).join(' ')}>
+      <div className="kpi-row">
+        {['SEED', 'DEMO', 'FIELD'].map((o) => <Kpi key={o} label={t(`o_${o}`)} value={fmt.num(records[o] || 0, 0)} />)}
+        <FieldSampleKpi records={records} />
+      </div>
       <Table
         rows={rows}
         columns={[
           { key: 'ref_no', label: t('document'), render: (r) => <Mono>{r.ref_no}</Mono> },
+          { key: 'origin', label: t('origin'), render: (r) => originPill(t, r.origin) },
           { key: 'target', label: '', render: (r) => t(`t_${r.target}`) },
           { key: 'actual', label: t('actual'), align: 'num', render: (r) => <strong>{show(r, r.actual)}</strong> },
           { key: 'model', label: t('model'), align: 'num', render: (r) => <>{show(r, r.model_pred)}<span className="cell-sub">{dev(r.model_dev_pct)}</span></> },

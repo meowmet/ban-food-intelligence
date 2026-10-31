@@ -1,5 +1,5 @@
 {
-  "message": "Emergency recall executed in MySQL via sp_recall_by_lot. POS lockdown broadcast active.",
+  "message": "Recall recorded and affected lots blocked. POS terminals refresh recalls by polling.",
   "recall_summary": {
     "recall_code": "RCL-2026-001",
     "status": "OPEN",
@@ -73,7 +73,7 @@
     ],
     "lock_enforced": true,
     "initiated_by": "kalite_muduru",
-    "timestamp": "2026-10-28T05:54:45.239Z"
+    "timestamp": "2026-10-30T14:30:58.835Z"
   },
   "status": "LOCKDOWN_ACTIVATED"
 }

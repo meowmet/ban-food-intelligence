@@ -372,6 +372,35 @@ CREATE TABLE stock_balance (
   CONSTRAINT ck_sb_nonneg CHECK (qty >= 0)
 ) ENGINE=InnoDB;
 
+-- Stok sayımı (POST /stock-counts): sayılan miktar ile sayım kaydedildiği andaki defter bakiyesi.
+-- Fark gerekçesiyle ADJUSTMENT_IN/OUT hareketi olur (stock_movement_id); farksız satır sayım kanıtıdır.
+CREATE TABLE stock_count (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  count_no      VARCHAR(30)  NOT NULL UNIQUE,
+  warehouse_id  INT UNSIGNED NOT NULL,
+  counted_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  counted_by    VARCHAR(64)  NOT NULL,
+  note          VARCHAR(255) NULL,
+  CONSTRAINT fk_sc_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouse(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE stock_count_line (
+  id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  count_id          INT UNSIGNED NOT NULL,
+  lot_id            INT UNSIGNED NOT NULL,
+  system_qty        DECIMAL(14,3) NOT NULL,
+  counted_qty       DECIMAL(14,3) NOT NULL,
+  diff_qty          DECIMAL(14,3) AS (counted_qty - system_qty) STORED,
+  reason            VARCHAR(255) NULL,
+  stock_movement_id BIGINT UNSIGNED NULL UNIQUE,
+  UNIQUE KEY uq_scl_lot (count_id, lot_id),
+  CONSTRAINT fk_scl_count FOREIGN KEY (count_id)          REFERENCES stock_count(id),
+  CONSTRAINT fk_scl_lot   FOREIGN KEY (lot_id)            REFERENCES lot(id),
+  CONSTRAINT fk_scl_sm    FOREIGN KEY (stock_movement_id) REFERENCES stock_movement(id),
+  CONSTRAINT ck_scl_counted CHECK (counted_qty >= 0),
+  CONSTRAINT ck_scl_reason  CHECK (counted_qty = system_qty OR reason IS NOT NULL)   -- fark gerekçesiz kaydedilmez
+) ENGINE=InnoDB;
+
 CREATE TABLE sale_line (
   id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   sale_id            INT UNSIGNED NOT NULL,
@@ -447,8 +476,48 @@ CREATE TABLE ml_prediction (
   interval_high    DECIMAL(14,4) NULL,
   interval_level   DECIMAL(4,3)  NULL,
   is_anomaly       TINYINT(1)    NULL,
+  -- kaynak: SEED = seed.sql örneği, DEMO = demo kurulumunda uygulamadan, FIELD = saha kurulumunda
+  -- uygulamadan (API ortamı DATA_ORIGIN=FIELD). FIELD "doğrulanmış" demek değildir: doğrulama kaynak
+  -- belge ve doğrulayan kişiyle uygulama dışında yapılır (ml-engine/audit_field.py).
+  data_origin      ENUM('SEED','DEMO','FIELD') NOT NULL DEFAULT 'DEMO',
   created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   INDEX ix_mlp_ref (ref_type, ref_id)
+) ENGINE=InnoDB;
+
+-- Dondurulmuş kasap tahmini (POST /ai/forecast/butchery/freeze): parçalar tartılmadan önce karkas
+-- girdisiyle kaydedilir ve sonra değişmez (tetikleyiciler). Karkas başına en fazla bir tane; birkaç
+-- tahminden sonradan iyisini seçmek mümkün değil. frozen_at sunucu saatidir. İşlem kaydedilince
+-- operation_id bir kez bağlanır; gerçekleşen ağırlıklar işlemin çıktılarından okunur
+-- (ml-engine/field_audit_export.sql). ml_prediction'daki kayıt anı tahmini bundan ayrıdır.
+CREATE TABLE butchery_forecast (
+  id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  input_lot_id     INT UNSIGNED  NOT NULL UNIQUE,
+  input_weight_kg  DECIMAL(10,3) NOT NULL,
+  op_date          DATE          NOT NULL,
+  operator_name    VARCHAR(100)  NULL,
+  frozen_by        VARCHAR(64)   NOT NULL,
+  data_origin      ENUM('SEED','DEMO','FIELD') NOT NULL DEFAULT 'DEMO',
+  frozen_at        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  operation_id     INT UNSIGNED  NULL UNIQUE,
+  CONSTRAINT fk_bf_lot    FOREIGN KEY (input_lot_id) REFERENCES lot(id),
+  CONSTRAINT fk_bf_op     FOREIGN KEY (operation_id) REFERENCES butchery_operation(id),
+  CONSTRAINT ck_bf_weight CHECK (input_weight_kg > 0)
+) ENGINE=InnoDB;
+
+-- Dondurulan parça tahminleri: model ve basit referans, ml_prediction ile aynı sütunlar.
+-- anomaly_band_kg: %98 bandın yarı genişliği (kg); gerçekleşen bunun dışındaysa anomali.
+CREATE TABLE butchery_forecast_part (
+  forecast_id      INT UNSIGNED  NOT NULL,
+  model_name       VARCHAR(50)   NOT NULL,
+  model_version    VARCHAR(30)   NOT NULL,
+  target_name      VARCHAR(50)   NOT NULL,                 -- but_kg ... fire_kg
+  predicted_value  DECIMAL(14,4) NOT NULL,
+  interval_low     DECIMAL(14,4) NULL,
+  interval_high    DECIMAL(14,4) NULL,
+  interval_level   DECIMAL(4,3)  NULL,
+  anomaly_band_kg  DECIMAL(14,4) NULL,
+  PRIMARY KEY (forecast_id, model_name, target_name),
+  CONSTRAINT fk_bfp_forecast FOREIGN KEY (forecast_id) REFERENCES butchery_forecast(id)
 ) ENGINE=InnoDB;
 
 -- KI doğruluk ölçümü: model ve basit referans (geçmiş ortalama oran) aynı zaman-bölmeli test
@@ -470,31 +539,66 @@ CREATE TABLE ml_model_metric (
 -- KI anomali uyarıları (ml-engine/anomaly_ali.py): tahmin edilen ile gerçek arasındaki açıklanamayan sapma.
 -- Berke'nin API'si v_ml_anomaly_alert'ten okur, status'ü günceller; FALSE_ALARM/RESOLVED geri bildirimi
 -- v_ml_anomaly_feedback ile gerçek işletmedeki precision'ı ölçer.
+-- API kayıt anında da yazar (api-go/controllers/alerts.go): canlı tahminin %98 bandı dışındaki üretim
+-- kabulü/parçalama, son alışlara göre fiyat artışı, kasada reddedilen geri çağrılmış/SKT'si geçmiş lot
+-- satışı ve stok sayımında eksik. Uyarı stok, maliyet veya lot durumunu değiştirmez.
 CREATE TABLE ml_anomaly_alert (
   id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  task             ENUM('PRODUCTION_YIELD','BUTCHERY_YIELD') NOT NULL,
-  detector         VARCHAR(30)  NOT NULL,                  -- robust_z / mahalanobis_mcd
+  task             ENUM('PRODUCTION_YIELD','BUTCHERY_YIELD','PURCHASE_COST','LOT_MOVEMENT') NOT NULL,
+  detector         VARCHAR(30)  NOT NULL,                  -- robust_z / mahalanobis_mcd / conformal_band / rule
   model_version    VARCHAR(60)  NOT NULL,                  -- ali-1.0.0+ali-anomaly-1.0.0
-  ref_type         VARCHAR(30)  NOT NULL,                  -- production_order / butchery_operation
+  ref_type         VARCHAR(30)  NOT NULL,                  -- production_order / butchery_operation / purchase_receipt_line / lot / stock_count_line
   ref_id           INT UNSIGNED NOT NULL,
-  score            DECIMAL(10,3) NOT NULL,                 -- üretim: z (negatif = düşük verim); parçalama: d²
+  event_ref        VARCHAR(64)  NOT NULL DEFAULT '',       -- tek olay (POS satışının UUIDv7'si); model uyarılarında boş
+  score            DECIMAL(10,3) NOT NULL,                 -- üretim: z (negatif = düşük verim); parçalama: d²; canlı: sapma / %98 bandı; fiyat: % artış
   threshold_warn   DECIMAL(10,3) NOT NULL,
   threshold_crit   DECIMAL(10,3) NOT NULL,
   severity         ENUM('WARN','CRITICAL') NOT NULL,
-  direction        ENUM('LOW_YIELD','HIGH_YIELD','FIRE_HIGH','PART_MISMATCH') NOT NULL,
-  expected_value   DECIMAL(14,3) NOT NULL,                 -- üretim: paket; parçalama: fire kg
+  direction        ENUM('LOW_YIELD','HIGH_YIELD','FIRE_HIGH','PART_MISMATCH','COST_INCREASE','BLOCKED_SALE','EXPIRED_SALE','COUNT_SHORTAGE') NOT NULL,
+  expected_value   DECIMAL(14,3) NOT NULL,                 -- üretim: paket; parçalama: fire kg; alış: referans birim fiyat; satış: 0; sayım: defter bakiyesi
   actual_value     DECIMAL(14,3) NOT NULL,
   deviation        DECIMAL(14,3) NOT NULL,                 -- gerçek − beklenen
-  est_loss_eur     DECIMAL(12,2) NOT NULL DEFAULT 0,       -- eksik paket × EKP / fazla fire × alış fiyatı
-  top_parts        VARCHAR(120) NULL,                      -- 'fire +0.95 kg, but -0.90 kg'
+  est_loss_eur     DECIMAL(12,2) NOT NULL DEFAULT 0,       -- eksik paket × EKP / fazla fire × alış fiyatı / fiyat farkı × miktar / sayım eksiği × lot maliyeti
+  top_parts        VARCHAR(120) NULL,                      -- 'fire +0.95 kg, but -0.90 kg'; kural uyarılarında kısa ayrıntı
   message          VARCHAR(255) NOT NULL,
   status           ENUM('OPEN','ACKNOWLEDGED','RESOLVED','FALSE_ALARM') NOT NULL DEFAULT 'OPEN',
   resolved_by      VARCHAR(64)  NULL,
   resolved_at      DATETIME(3)  NULL,
   resolution_note  VARCHAR(255) NULL,
   created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uq_mla_ref (task, ref_type, ref_id, model_version),   -- yeniden çalıştırma idempotent
+  UNIQUE KEY uq_mla_ref (task, ref_type, ref_id, model_version, event_ref),   -- yeniden çalıştırma idempotent
   INDEX ix_mla_open (status, severity)
+) ENGINE=InnoDB;
+
+-- Canlı uyarı eşikleri (alerts.go). Varsayılanlar sentetik stres testinden: 100 kayıtta en fazla 1 yanlış
+-- alarm, bu bütçede en yüksek yakalama (ml-engine/calibrate_live_alerts.py, docs/AI.md). Verim kuralları
+-- %98 bandın katı, alış % artış, sayım eksiği €. Yetkili POST /alerts/rules ile değiştirir (audit_log).
+CREATE TABLE alert_threshold (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  rule        ENUM('PRODUCTION_YIELD','BUTCHERY_YIELD','PURCHASE_COST','COUNT_SHORTAGE') NOT NULL UNIQUE,
+  warn        DECIMAL(10,3) NOT NULL,
+  crit        DECIMAL(10,3) NOT NULL,
+  updated_by  VARCHAR(64)  NOT NULL DEFAULT 'default',
+  updated_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT ck_at_order CHECK (warn > 0 AND crit > warn)
+) ENGINE=InnoDB;
+INSERT INTO alert_threshold (rule, warn, crit) VALUES
+  ('PRODUCTION_YIELD', 1.000, 1.500), ('BUTCHERY_YIELD', 1.500, 2.000),
+  ('PURCHASE_COST', 10.000, 25.000), ('COUNT_SHORTAGE', 10.000, 100.000);
+
+-- Sistemin uyarmadığı, elle bulunan sorunlar (POST /alerts/missed). Gerçek sorun olarak kapatılan
+-- uyarılarla birlikte sahada gözlenen yakalama oranını verir: doğrulanan / (doğrulanan + kaçırılan).
+CREATE TABLE alert_miss (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  task          ENUM('PRODUCTION_YIELD','BUTCHERY_YIELD','PURCHASE_COST','LOT_MOVEMENT') NOT NULL,
+  ref_no        VARCHAR(30)  NULL,
+  lot_id        INT UNSIGNED NULL,
+  note          VARCHAR(255) NOT NULL,
+  est_loss_eur  DECIMAL(12,2) NOT NULL DEFAULT 0,
+  found_by      VARCHAR(64)  NOT NULL,
+  found_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_am_lot  FOREIGN KEY (lot_id) REFERENCES lot(id),
+  CONSTRAINT ck_am_loss CHECK (est_loss_eur >= 0)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
@@ -666,17 +770,17 @@ SELECT id, task, model_name, model_version, ref_type, ref_id, target_name,
        created_at
 FROM ml_prediction;
 
--- KI anomali uyarıları: API/panel için okunabilir hali (emir/parçalama no, mamul ya da karkas lotu)
+-- KI anomali uyarıları: API/panel için okunabilir hali (emir/parçalama/alış no, mamul, karkas ya da alış lotu)
 CREATE OR REPLACE VIEW v_ml_anomaly_alert AS
 SELECT a.id, a.task, a.severity, a.direction, a.status,
-       COALESCE(po.order_no, bo.op_no)                         AS ref_no,
-       COALESCE(po.order_date, bo.op_date)                     AS ref_date,
-       COALESCE(pl.lot_no, bl.lot_no)                          AS lot_no,
-       COALESCE(sub.name, bo.operator_name)                    AS responsible,
+       COALESCE(po.order_no, bo.op_no, pr.receipt_no, sc.count_no, ml.lot_no)       AS ref_no,
+       COALESCE(po.order_date, bo.op_date, pr.receipt_date, DATE(sc.counted_at), DATE(a.created_at)) AS ref_date,
+       COALESCE(pl.lot_no, bl.lot_no, prl_lot.lot_no, scl_lot.lot_no, ml.lot_no) AS lot_no,
+       COALESCE(sub.name, bo.operator_name, ps.name, sc.counted_by)                 AS responsible,
        a.expected_value, a.actual_value, a.deviation, a.est_loss_eur,
        a.score, a.threshold_warn, a.threshold_crit, a.detector, a.model_version,
        a.top_parts, a.message, a.created_at, a.resolved_by, a.resolved_at, a.resolution_note,
-       a.ref_type, a.ref_id
+       a.ref_type, a.ref_id, a.event_ref
 FROM ml_anomaly_alert a
 LEFT JOIN production_order po   ON a.ref_type = 'production_order'   AND po.id = a.ref_id
 LEFT JOIN supplier sub          ON sub.id = po.subcontractor_id
@@ -684,7 +788,15 @@ LEFT JOIN (SELECT pout.production_order_id, MIN(l.lot_no) AS lot_no
              FROM production_output pout JOIN lot l ON l.id = pout.lot_id
             GROUP BY pout.production_order_id) pl ON pl.production_order_id = po.id
 LEFT JOIN butchery_operation bo ON a.ref_type = 'butchery_operation' AND bo.id = a.ref_id
-LEFT JOIN lot bl                ON bl.id = bo.input_lot_id;
+LEFT JOIN lot bl                ON bl.id = bo.input_lot_id
+LEFT JOIN purchase_receipt_line prl ON a.ref_type = 'purchase_receipt_line' AND prl.id = a.ref_id
+LEFT JOIN purchase_receipt pr   ON pr.id = prl.receipt_id
+LEFT JOIN supplier ps           ON ps.id = pr.supplier_id
+LEFT JOIN lot prl_lot           ON prl_lot.id = prl.lot_id
+LEFT JOIN stock_count_line scl  ON a.ref_type = 'stock_count_line' AND scl.id = a.ref_id
+LEFT JOIN stock_count sc        ON sc.id = scl.count_id
+LEFT JOIN lot scl_lot           ON scl_lot.id = scl.lot_id
+LEFT JOIN lot ml                ON a.ref_type = 'lot' AND ml.id = a.ref_id;
 
 -- Gerçek kullanımda ölçülebilirlik: kapatılan uyarılardan precision (RESOLVED = gerçek sorun)
 CREATE OR REPLACE VIEW v_ml_anomaly_feedback AS
@@ -893,6 +1005,65 @@ BEFORE DELETE ON audit_log
 FOR EACH ROW
 BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: audit_log is append-only';
+END$$
+
+-- Dondurulmuş kasap tahmini: zaman sunucudan; parçalanmış karkas için dondurulamaz; değişmez,
+-- yalnızca aynı karkası parçalayan işleme bir kez bağlanır.
+CREATE TRIGGER trg_bf_before_insert
+BEFORE INSERT ON butchery_forecast
+FOR EACH ROW
+BEGIN
+  SET NEW.frozen_at = CURRENT_TIMESTAMP(3);
+  IF NEW.operation_id IS NOT NULL OR EXISTS (
+      SELECT 1 FROM butchery_operation WHERE input_lot_id = NEW.input_lot_id AND status = 'POSTED') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'FORECAST_TOO_LATE: the carcass is already cut';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_bf_before_update
+BEFORE UPDATE ON butchery_forecast
+FOR EACH ROW
+BEGIN
+  IF OLD.operation_id IS NOT NULL OR NEW.operation_id IS NULL
+     OR NOT (NEW.id <=> OLD.id AND NEW.input_lot_id <=> OLD.input_lot_id
+             AND NEW.input_weight_kg <=> OLD.input_weight_kg AND NEW.op_date <=> OLD.op_date
+             AND NEW.operator_name <=> OLD.operator_name AND NEW.frozen_by <=> OLD.frozen_by
+             AND NEW.data_origin <=> OLD.data_origin AND NEW.frozen_at <=> OLD.frozen_at) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: a frozen forecast only gets its butchery operation, once';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM butchery_operation WHERE id = NEW.operation_id AND input_lot_id = OLD.input_lot_id) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_INPUT: the operation cuts another carcass';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_bf_no_delete
+BEFORE DELETE ON butchery_forecast
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: a frozen forecast is never deleted';
+END$$
+
+CREATE TRIGGER trg_bfp_before_insert
+BEFORE INSERT ON butchery_forecast_part
+FOR EACH ROW
+BEGIN
+  IF (SELECT operation_id FROM butchery_forecast WHERE id = NEW.forecast_id) IS NOT NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: the frozen forecast is already linked to its operation';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_bfp_no_update
+BEFORE UPDATE ON butchery_forecast_part
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: frozen forecast parts never change';
+END$$
+
+CREATE TRIGGER trg_bfp_no_delete
+BEFORE DELETE ON butchery_forecast_part
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IMMUTABLE: frozen forecast parts never change';
 END$$
 
 -- Lot durum değişiklikleri denetim günlüğüne

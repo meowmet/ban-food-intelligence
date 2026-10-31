@@ -38,6 +38,7 @@ type AIComparisonDto struct {
 	Task              string   `json:"task"`   // PRODUCTION | BUTCHERY
 	RefNo             string   `json:"ref_no"` // URT-2026-045 / PRC-2026-001
 	Target            string   `json:"target"` // actual_qty, ekp, but_kg ...
+	Origin            string   `json:"origin"` // SEED | DEMO | FIELD (ml_prediction.data_origin; FIELD is unverified)
 	Actual            *float64 `json:"actual"`
 	ModelPred         *float64 `json:"model_pred"`
 	ModelDev          *float64 `json:"model_dev"`
@@ -59,8 +60,9 @@ type AISummaryDto struct {
 	Model       string            `json:"model"`
 	Baseline    string            `json:"baseline"`
 	DataNote    string            `json:"data_note"`
-	Metrics     []AIMetricDto     `json:"metrics"`
-	Comparisons []AIComparisonDto `json:"comparisons"`
+	Metrics     []AIMetricDto     `json:"metrics"`     // synthetic held-out test
+	Comparisons []AIComparisonDto `json:"comparisons"` // records in this database
+	Records     map[string]int    `json:"records"`     // documents behind the comparisons by origin
 }
 
 // Summary handles GET /ai/summary.
@@ -72,8 +74,11 @@ func (c *AIController) Summary(w http.ResponseWriter, r *http.Request) {
 	resp := AISummaryDto{
 		Model:    championModel,
 		Baseline: baselineModel,
-		DataNote: "Models are trained on synthetic, anonymised history (ml-engine/generator_ali.py). Metrics are measured on the latest 20% of dates (time split). Small and synthetic data: indicative only.",
-		Metrics:  []AIMetricDto{}, Comparisons: []AIComparisonDto{},
+		DataNote: "Models are trained on synthetic, anonymised history (ml-engine/generator_ali.py). Metrics are measured on the latest 20% of dates (time split). Small and synthetic data: indicative only. " +
+			"Comparisons are records in this database by origin: SEED (seed.sql), DEMO (entered in a demo deployment), FIELD (entered with DATA_ORIGIN=FIELD, not verified). " +
+			"Verified field performance is measured outside the app (ml-engine/audit_field.py).",
+		Metrics: []AIMetricDto{}, Comparisons: []AIComparisonDto{},
+		Records: map[string]int{"SEED": 0, "DEMO": 0, "FIELD": 0},
 	}
 
 	rows, err := c.db.QueryContext(r.Context(),
@@ -94,7 +99,7 @@ func (c *AIController) Summary(w http.ResponseWriter, r *http.Request) {
 	prow, err := c.db.QueryContext(r.Context(),
 		`SELECT IF(mp.ref_type = 'production_order', 'PRODUCTION', 'BUTCHERY'),
 		        COALESCE(po.order_no, bo.op_no), mp.target_name, mp.model_name, mp.predicted_value, mp.actual_value,
-		        mp.interval_low, mp.interval_high, mp.interval_level, mp.is_anomaly
+		        mp.interval_low, mp.interval_high, mp.interval_level, mp.is_anomaly, mp.data_origin
 		 FROM ml_prediction mp
 		 LEFT JOIN production_order po   ON mp.ref_type = 'production_order'   AND po.id = mp.ref_id
 		 LEFT JOIN butchery_operation bo ON mp.ref_type = 'butchery_operation' AND bo.id = mp.ref_id
@@ -106,20 +111,22 @@ func (c *AIController) Summary(w http.ResponseWriter, r *http.Request) {
 	defer prow.Close()
 
 	byKey := map[string]*AIComparisonDto{}
+	docs := map[string]string{} // task|ref -> origin
 	for prow.Next() {
-		var task, ref, target, model string
+		var task, ref, target, model, origin string
 		var pred float64
 		var actual, lo, hi, level sql.NullFloat64
 		var anomaly sql.NullBool
-		if err := prow.Scan(&task, &ref, &target, &model, &pred, &actual, &lo, &hi, &level, &anomaly); err != nil {
+		if err := prow.Scan(&task, &ref, &target, &model, &pred, &actual, &lo, &hi, &level, &anomaly, &origin); err != nil {
 			continue
 		}
 		key := task + "|" + ref + "|" + target
 		cmp, ok := byKey[key]
 		if !ok {
-			cmp = &AIComparisonDto{Task: task, RefNo: ref, Target: target}
+			cmp = &AIComparisonDto{Task: task, RefNo: ref, Target: target, Origin: origin}
 			byKey[key] = cmp
 		}
+		docs[task+"|"+ref] = origin
 		if actual.Valid {
 			a := actual.Float64
 			cmp.Actual = &a
@@ -159,6 +166,9 @@ func (c *AIController) Summary(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp.Comparisons = append(resp.Comparisons, *cmp)
+	}
+	for _, origin := range docs {
+		resp.Records[origin]++
 	}
 	order := map[string]int{"actual_qty": 0, "ekp": 1, "but_kg": 2, "sirt_kg": 3, "omuz_kg": 4, "kaburga_kg": 5, "kiyma_kg": 6, "fire_kg": 7}
 	sort.Slice(resp.Comparisons, func(i, j int) bool {

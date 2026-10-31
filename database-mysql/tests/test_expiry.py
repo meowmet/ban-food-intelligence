@@ -30,6 +30,18 @@ def test_seed_calendar_is_relative_to_today(db):
     assert latest == 1                                  # son seed satışı dün, gelecekte kayıt yok
 
 
+def test_seed_movements_carry_document_time(db):
+    # prosedür/tetikleyici hareketleri yükleme anına düşerse belge tarihli transfer ve satıştan
+    # sonra sıralanır; hareket raporundaki ara bakiye (moved_at, id sırası) eksiye iner
+    latest = query(db, "SELECT DATEDIFF(CURRENT_DATE, MAX(moved_at)) d FROM stock_movement")[0]["d"]
+    assert latest == 1
+    negative = query(db, "SELECT lot_no, warehouse_id, moved_at, bal FROM ("
+                         " SELECT l.lot_no, sm.warehouse_id, sm.moved_at, SUM(sm.qty) OVER ("
+                         "   PARTITION BY sm.lot_id, sm.warehouse_id ORDER BY sm.moved_at, sm.id) bal"
+                         " FROM stock_movement sm JOIN lot l ON l.id = sm.lot_id) x WHERE bal < 0")
+    assert negative == []
+
+
 def test_expired_lot_cannot_be_sold(db):
     with pytest.raises(pymysql.err.OperationalError, match="LOT_EXPIRED"):
         _sale(db, "01000000-0000-7000-8000-00000000e001", "KZY-2026-001", 0.5, "NOW(3)")

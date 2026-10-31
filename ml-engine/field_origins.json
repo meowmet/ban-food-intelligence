@@ -1,0 +1,18 @@
+{
+  "production_order:URT-2026-045": {
+    "origin": "demo_seed",
+    "source_ref": "database-mysql/seed.sql"
+  },
+  "production_order:URT-2026-046": {
+    "origin": "demo_seed",
+    "source_ref": "database-mysql/seed.sql"
+  },
+  "production_order:URT-2026-047": {
+    "origin": "demo_manual",
+    "source_ref": "Claude handoff 2026-10-29: order explicitly recorded as a demo test"
+  },
+  "butchery_operation:PRC-2026-001": {
+    "origin": "demo_seed",
+    "source_ref": "database-mysql/seed.sql"
+  }
+}

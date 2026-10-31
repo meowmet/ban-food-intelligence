@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"strings"
 )
@@ -87,6 +88,9 @@ func (c *MovementsController) Transfer(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
+		if err := wholeUnits(r.Context(), tx, lot, req.Qty); err != nil {
+			return nil, err
+		}
 		from, err := warehouseID(r.Context(), tx, req.FromWarehouse)
 		if err != nil {
 			return nil, err
@@ -121,6 +125,9 @@ func (c *MovementsController) Return(w http.ResponseWriter, r *http.Request) {
 	c.inTx(w, r, func(tx *sql.Tx) (*MovementResultDto, error) {
 		lot, cost, err := lotID(r.Context(), tx, req.LotNo)
 		if err != nil {
+			return nil, err
+		}
+		if err := wholeUnits(r.Context(), tx, lot, req.Qty); err != nil {
 			return nil, err
 		}
 		wh, err := warehouseID(r.Context(), tx, req.Warehouse)
@@ -167,6 +174,9 @@ func (c *MovementsController) Waste(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
+		if err := wholeUnits(r.Context(), tx, lot, req.Qty); err != nil {
+			return nil, err
+		}
 		wh, err := warehouseID(r.Context(), tx, req.Warehouse)
 		if err != nil {
 			return nil, err
@@ -193,6 +203,9 @@ func (c *MovementsController) Rework(w http.ResponseWriter, r *http.Request) {
 	c.inTx(w, r, func(tx *sql.Tx) (*MovementResultDto, error) {
 		in, cost, err := lotID(r.Context(), tx, req.InputLotNo)
 		if err != nil {
+			return nil, err
+		}
+		if err := wholeUnits(r.Context(), tx, in, req.QtyConsumed, req.OutputQty); err != nil { // the new lot keeps the unit
 			return nil, err
 		}
 		wh, err := warehouseID(r.Context(), tx, req.Warehouse)
@@ -229,6 +242,9 @@ func (c *MovementsController) Rework(w http.ResponseWriter, r *http.Request) {
 
 type notFoundError string
 type movementConflict string
+type invalidMovement string
+
+func (e invalidMovement) Error() string { return string(e) }
 
 func (e movementConflict) Error() string { return string(e) }
 
@@ -247,6 +263,11 @@ func (c *MovementsController) inTx(w http.ResponseWriter, r *http.Request, fn fu
 		err = tx.Commit()
 	}
 	if err != nil {
+		var invalid invalidMovement
+		if errors.As(err, &invalid) {
+			writeAPIError(w, r, http.StatusUnprocessableEntity, "INVALID_INPUT", invalid.Error())
+			return
+		}
 		var conflict movementConflict
 		if errors.As(err, &conflict) {
 			writeAPIError(w, r, http.StatusConflict, "CONFLICT", conflict.Error())
@@ -275,6 +296,21 @@ func lotID(ctx context.Context, tx *sql.Tx, lotNo string) (int64, float64, error
 		return 0, 0, notFound("lot " + lotNo)
 	}
 	return id, cost, nil
+}
+
+// wholeUnits refuses a fraction of a counted unit (packs, pieces); weights may be fractional.
+func wholeUnits(ctx context.Context, tx *sql.Tx, lot int64, qty ...float64) error {
+	var countable bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT NOT u.is_weight FROM lot l JOIN unit_of_measure u ON u.code = l.uom_code WHERE l.id = ?`, lot).Scan(&countable); err != nil {
+		return err
+	}
+	for _, q := range qty {
+		if countable && q != math.Trunc(q) {
+			return invalidMovement("qty: whole units only for this lot")
+		}
+	}
+	return nil
 }
 
 func warehouseID(ctx context.Context, tx *sql.Tx, code string) (int64, error) {

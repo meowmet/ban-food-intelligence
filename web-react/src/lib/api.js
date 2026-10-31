@@ -74,11 +74,14 @@ export async function apiWrite(path, body, pin) {
     session = { token: s.token, expiresAt: s.expires_at };
   }
   try {
-    return await apiFetch(path, {
+    const res = await apiFetch(path, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: { Authorization: `Bearer ${session.token}` },
     });
+    // a saved document may have raised an alert: the sidebar bell listens for this
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('data:changed'));
+    return res;
   } catch (e) {
     if (e.code === 'AUTH_REQUIRED') session = null; // API restarted: sign in again next time
     throw e;

@@ -52,13 +52,30 @@
       {
         "order_no": "URT-2026-045",
         "lot_no": "FAS-FTR-2026-045",
+        "is_service": true,
         "cost_element": "Fason hizmet / işçilik",
         "qty": 85,
         "uom_code": "PAKET",
         "unit_cost": 5.5,
         "amount": 467.5
       }
-    ]
+    ],
+    "forecast": {
+      "model": "ali_ridge",
+      "model_version": "ali-1.1.0",
+      "packages": 84.6,
+      "packages_low": 83.2,
+      "packages_high": 86,
+      "ekp": 18.2172,
+      "ekp_low": 18.0116,
+      "ekp_high": 18.4327,
+      "interval_level": 0.8,
+      "baseline_packages": 83.3492,
+      "baseline_ekp": 18.4095,
+      "actual_packages": 85,
+      "actual_ekp": 18.1588,
+      "anomaly": false
+    }
   },
   {
     "order_no": "URT-2026-046",
@@ -113,12 +130,29 @@
       {
         "order_no": "URT-2026-046",
         "lot_no": "FAS-FTR-2026-046",
+        "is_service": true,
         "cost_element": "Fason hizmet / işçilik",
         "qty": 83,
         "uom_code": "PAKET",
         "unit_cost": 5.5,
         "amount": 456.5
       }
-    ]
+    ],
+    "forecast": {
+      "model": "ali_ridge",
+      "model_version": "ali-1.1.0",
+      "packages": 82.8,
+      "packages_low": 81.4,
+      "packages_high": 84.3,
+      "ekp": 18.6692,
+      "ekp_low": 18.4419,
+      "ekp_high": 18.9029,
+      "interval_level": 0.8,
+      "baseline_packages": 83.3492,
+      "baseline_ekp": 18.5895,
+      "actual_packages": 83,
+      "actual_ekp": 18.6446,
+      "anomaly": false
+    }
   }
 ]

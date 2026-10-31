@@ -152,3 +152,13 @@ func TestForecastOfTheSeedCarcass(t *testing.T) {
 		}
 	}
 }
+
+// Only an explicit DATA_ORIGIN=FIELD labels new forecasts as field data; anything else stays DEMO.
+func TestPredictionOriginDefaultsToDemo(t *testing.T) {
+	for env, want := range map[string]string{"": "DEMO", "demo": "DEMO", "field": "FIELD", " FIELD ": "FIELD", "verified": "DEMO"} {
+		t.Setenv("DATA_ORIGIN", env)
+		if got := predictionOrigin(); got != want {
+			t.Errorf("DATA_ORIGIN=%q: got %s, want %s", env, got, want)
+		}
+	}
+}

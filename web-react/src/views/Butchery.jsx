@@ -3,6 +3,7 @@ import { useApi } from '../lib/api';
 import { useLang } from '../lib/i18n';
 import { Async, Group, Kpi, Mono, Page, Pill, Segmented, Table } from '../lib/ui';
 import { ButcheryForm } from './Entry';
+import { LotLink } from './LotPanel';
 
 const toneFor = { ERROR: 'bad', WARNING: 'warn', OK: 'ok' };
 
@@ -78,7 +79,7 @@ function AllocationTables({ op }) {
         rows={op.allocated_cuts || []}
         rowTone={(c) => (c.output_kind === 'WASTE' ? 'muted' : '')}
         columns={[
-          { key: 'name', label: t('product'), render: (c) => <>{c.name}<div className="cell-sub"><Mono>{c.lot_no || '–'}</Mono></div></> },
+          { key: 'name', label: t('product'), render: (c) => <>{c.name}<div className="cell-sub"><LotLink lot={c.lot_no} /></div></> },
           { key: 'w', label: t('qty'), align: 'num', render: (c) => fmt.qty(c.yield_weight_kg, 'KG') },
           { key: 'y', label: t('yield'), align: 'num', render: (c) => fmt.pct(c.yield_pct) },
           { key: 'p', label: t('vkp'), align: 'num', render: (c) => (c.output_kind === 'WASTE' ? '–' : fmt.money(c.market_price_per_kg)) },

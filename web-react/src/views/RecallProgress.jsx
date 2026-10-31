@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { apiWrite, useApi } from '../lib/api';
 import { useLang } from '../lib/i18n';
 import { Async, ErrorState, Kpi, Mono, Pill, Table } from '../lib/ui';
+import { LotLink } from './LotPanel';
 
 export default function RecallProgress({ recall, onChanged }) {
   const { t, fmt } = useLang();
@@ -50,7 +51,7 @@ export default function RecallProgress({ recall, onChanged }) {
         {p.all_recovered && <p className="notice notice-ok">{t('rp_recovered')}</p>}
         <Table rows={p.lines} rowKey={(l) => `${l.customer_code}:${l.lot_no}`} columns={[
           { key: 'customer', label: t('customer'), render: (l) => <>{l.customer_name}<div className="cell-sub">{l.customer_code} · {t('tier')} {l.tier}</div></> },
-          { key: 'lot_no', label: t('lot'), render: (l) => <Mono>{l.lot_no}</Mono> },
+          { key: 'lot_no', label: t('lot'), render: (l) => <LotLink lot={l.lot_no} /> },
           { key: 'qty_received', label: t('shipped'), align: 'num', render: (l) => fmt.qty(l.qty_received, l.uom_code) },
           { key: 'qty_forwarded', label: t('rp_forwarded'), align: 'num', render: (l) => fmt.qty(l.qty_forwarded, l.uom_code) },
           { key: 'qty_returned', label: t('returned'), align: 'num', render: (l) => fmt.qty(l.qty_returned, l.uom_code) },

@@ -1,0 +1,478 @@
+{
+  "version": "live-alerts-1.0.0",
+  "model_version": "ali-1.1.0",
+  "inject_rate": 0.06,
+  "rounds": 30,
+  "data": "synthetic (generator_ali.py, seed 42); time-split test period only",
+  "production_yield": {
+    "n_test": 302,
+    "band98_yield_pts": 3.8721714567664947,
+    "curve": [
+      {
+        "threshold": 0.5,
+        "precision": 0.5646,
+        "recall": 0.9097,
+        "false_alarms_per_100": 5.5739
+      },
+      {
+        "threshold": 0.75,
+        "precision": 0.8662,
+        "recall": 0.7944,
+        "false_alarms_per_100": 0.9713
+      },
+      {
+        "threshold": 1.0,
+        "precision": 1.0,
+        "recall": 0.6444,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 1.25,
+        "precision": 1.0,
+        "recall": 0.4361,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 1.5,
+        "precision": 1.0,
+        "recall": 0.3222,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 1.75,
+        "precision": 1.0,
+        "recall": 0.0708,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 2.0,
+        "precision": 1.0,
+        "recall": 0.0556,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 2.5,
+        "precision": 0.0,
+        "recall": 0.0,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 3.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "false_alarms_per_100": 0.0
+      }
+    ],
+    "recall_by_drop_pts": {
+      "1": {
+        "small_1.5-3": 0.0403,
+        "medium_3-4.5": 0.4249,
+        "large_4.5+": 0.8834
+      },
+      "2": {
+        "small_1.5-3": 0.0,
+        "medium_3-4.5": 0.0,
+        "large_4.5+": 0.0448
+      }
+    }
+  },
+  "butchery_yield": {
+    "n_test": 500,
+    "band98_pct": [
+      1.6600653445209979,
+      1.3503333316884074,
+      1.8147739102571556,
+      1.3008950265470247,
+      1.971182129341278,
+      1.6236926315819211
+    ],
+    "curve": [
+      {
+        "threshold": 0.5,
+        "precision": 0.078,
+        "recall": 0.9911,
+        "false_alarms_per_100": 70.26
+      },
+      {
+        "threshold": 0.75,
+        "precision": 0.158,
+        "recall": 0.9489,
+        "false_alarms_per_100": 30.34
+      },
+      {
+        "threshold": 1.0,
+        "precision": 0.3579,
+        "recall": 0.8589,
+        "false_alarms_per_100": 9.24
+      },
+      {
+        "threshold": 1.25,
+        "precision": 0.7733,
+        "recall": 0.7589,
+        "false_alarms_per_100": 1.3267
+      },
+      {
+        "threshold": 1.5,
+        "precision": 0.9081,
+        "recall": 0.6433,
+        "false_alarms_per_100": 0.3867
+      },
+      {
+        "threshold": 1.75,
+        "precision": 1.0,
+        "recall": 0.5111,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 2.0,
+        "precision": 1.0,
+        "recall": 0.3911,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 2.5,
+        "precision": 1.0,
+        "recall": 0.1711,
+        "false_alarms_per_100": 0.0
+      },
+      {
+        "threshold": 3.0,
+        "precision": 0.9,
+        "recall": 0.0633,
+        "false_alarms_per_100": 0.0
+      }
+    ],
+    "recall_by_shift_pct_of_carcass": {
+      "1": {
+        "small_1-2": 0.6447,
+        "medium_2-3": 0.951,
+        "large_3+": 1.0
+      },
+      "2": {
+        "small_1-2": 0.0283,
+        "medium_2-3": 0.3531,
+        "large_3+": 0.8176
+      }
+    }
+  },
+  "purchase_cost": {
+    "weeks": 104,
+    "products": [
+      "HM-ET-DANA",
+      "HM-BAHARAT",
+      "HM-BAGIRSAK",
+      "KZ-KARKAS"
+    ],
+    "reference": "mean of the last 3 purchases",
+    "by_price_noise": [
+      {
+        "sigma": 0.015,
+        "curve": [
+          {
+            "threshold": 5.0,
+            "false_alarms_per_100": 2.4676,
+            "detected_by_jump_pct": {
+              "5-10": 0.8583,
+              "10-20": 1.0,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 7.5,
+            "false_alarms_per_100": 0.356,
+            "detected_by_jump_pct": {
+              "5-10": 0.475,
+              "10-20": 0.9917,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 10.0,
+            "false_alarms_per_100": 0.0081,
+            "detected_by_jump_pct": {
+              "5-10": 0.1583,
+              "10-20": 0.9083,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 12.5,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0417,
+              "10-20": 0.75,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 15.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.5667,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 20.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.125,
+              "20-40": 0.95
+            }
+          },
+          {
+            "threshold": 25.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.0083,
+              "20-40": 0.7917
+            }
+          },
+          {
+            "threshold": 30.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.0,
+              "20-40": 0.5083
+            }
+          }
+        ]
+      },
+      {
+        "sigma": 0.03,
+        "curve": [
+          {
+            "threshold": 5.0,
+            "false_alarms_per_100": 10.8414,
+            "detected_by_jump_pct": {
+              "5-10": 0.7917,
+              "10-20": 0.9833,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 7.5,
+            "false_alarms_per_100": 3.1796,
+            "detected_by_jump_pct": {
+              "5-10": 0.6,
+              "10-20": 0.9583,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 10.0,
+            "false_alarms_per_100": 0.5259,
+            "detected_by_jump_pct": {
+              "5-10": 0.3083,
+              "10-20": 0.8667,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 12.5,
+            "false_alarms_per_100": 0.0809,
+            "detected_by_jump_pct": {
+              "5-10": 0.15,
+              "10-20": 0.6917,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 15.0,
+            "false_alarms_per_100": 0.0162,
+            "detected_by_jump_pct": {
+              "5-10": 0.1083,
+              "10-20": 0.525,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 20.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.025,
+              "10-20": 0.1667,
+              "20-40": 0.95
+            }
+          },
+          {
+            "threshold": 25.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.05,
+              "20-40": 0.8333
+            }
+          },
+          {
+            "threshold": 30.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0,
+              "10-20": 0.0,
+              "20-40": 0.5667
+            }
+          }
+        ]
+      },
+      {
+        "sigma": 0.05,
+        "curve": [
+          {
+            "threshold": 5.0,
+            "false_alarms_per_100": 21.432,
+            "detected_by_jump_pct": {
+              "5-10": 0.6167,
+              "10-20": 0.9667,
+              "20-40": 1.0
+            }
+          },
+          {
+            "threshold": 7.5,
+            "false_alarms_per_100": 11.343,
+            "detected_by_jump_pct": {
+              "5-10": 0.4333,
+              "10-20": 0.9083,
+              "20-40": 0.9917
+            }
+          },
+          {
+            "threshold": 10.0,
+            "false_alarms_per_100": 5.2104,
+            "detected_by_jump_pct": {
+              "5-10": 0.325,
+              "10-20": 0.8417,
+              "20-40": 0.9917
+            }
+          },
+          {
+            "threshold": 12.5,
+            "false_alarms_per_100": 2.0146,
+            "detected_by_jump_pct": {
+              "5-10": 0.2417,
+              "10-20": 0.7333,
+              "20-40": 0.975
+            }
+          },
+          {
+            "threshold": 15.0,
+            "false_alarms_per_100": 0.7605,
+            "detected_by_jump_pct": {
+              "5-10": 0.1167,
+              "10-20": 0.575,
+              "20-40": 0.9667
+            }
+          },
+          {
+            "threshold": 20.0,
+            "false_alarms_per_100": 0.1052,
+            "detected_by_jump_pct": {
+              "5-10": 0.0417,
+              "10-20": 0.275,
+              "20-40": 0.8833
+            }
+          },
+          {
+            "threshold": 25.0,
+            "false_alarms_per_100": 0.0243,
+            "detected_by_jump_pct": {
+              "5-10": 0.0167,
+              "10-20": 0.1333,
+              "20-40": 0.7667
+            }
+          },
+          {
+            "threshold": 30.0,
+            "false_alarms_per_100": 0.0,
+            "detected_by_jump_pct": {
+              "5-10": 0.0083,
+              "10-20": 0.025,
+              "20-40": 0.5833
+            }
+          }
+        ]
+      },
+      {
+        "sigma": 0.08,
+        "curve": [
+          {
+            "threshold": 5.0,
+            "false_alarms_per_100": 30.5016,
+            "detected_by_jump_pct": {
+              "5-10": 0.5667,
+              "10-20": 0.775,
+              "20-40": 0.975
+            }
+          },
+          {
+            "threshold": 7.5,
+            "false_alarms_per_100": 22.1359,
+            "detected_by_jump_pct": {
+              "5-10": 0.45,
+              "10-20": 0.725,
+              "20-40": 0.975
+            }
+          },
+          {
+            "threshold": 10.0,
+            "false_alarms_per_100": 15.1052,
+            "detected_by_jump_pct": {
+              "5-10": 0.3667,
+              "10-20": 0.65,
+              "20-40": 0.925
+            }
+          },
+          {
+            "threshold": 12.5,
+            "false_alarms_per_100": 9.9595,
+            "detected_by_jump_pct": {
+              "5-10": 0.2583,
+              "10-20": 0.575,
+              "20-40": 0.8667
+            }
+          },
+          {
+            "threshold": 15.0,
+            "false_alarms_per_100": 6.4239,
+            "detected_by_jump_pct": {
+              "5-10": 0.2,
+              "10-20": 0.4667,
+              "20-40": 0.85
+            }
+          },
+          {
+            "threshold": 20.0,
+            "false_alarms_per_100": 2.2816,
+            "detected_by_jump_pct": {
+              "5-10": 0.05,
+              "10-20": 0.3167,
+              "20-40": 0.7167
+            }
+          },
+          {
+            "threshold": 25.0,
+            "false_alarms_per_100": 0.623,
+            "detected_by_jump_pct": {
+              "5-10": 0.0083,
+              "10-20": 0.1667,
+              "20-40": 0.6083
+            }
+          },
+          {
+            "threshold": 30.0,
+            "false_alarms_per_100": 0.1537,
+            "detected_by_jump_pct": {
+              "5-10": 0.0083,
+              "10-20": 0.0917,
+              "20-40": 0.4417
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

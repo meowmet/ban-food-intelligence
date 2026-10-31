@@ -134,8 +134,97 @@ seen by the model):
 | **outside 98 % band (`anomaly`)** | 1.6 % | 11 / 14 | **92 %** | **0.14** |
 
 The calibrated alert detector in `anomaly_ali.py` (robust z-score and Mahalanobis distance,
-reported separately in `artifacts/ali/anomaly_metrics.json`) remains the source of the
-`ml_anomaly_alert` rows. A flag never changes stock, cost or lot status; a person checks it.
+reported separately in `artifacts/ali/anomaly_metrics.json`) writes `ml_anomaly_alert` rows in
+batch. A flag never changes stock, cost or lot status; a person checks it.
+
+### Live alerts and their review
+
+The API also writes `ml_anomaly_alert` the moment a document is saved
+([`alerts.go`](../api-go/controllers/alerts.go)), so a new deviation reaches the dashboard's
+**Alerts** tab and the sidebar bell without a batch run. The thresholds are configuration
+(`alert_threshold`, `GET/POST /alerts/rules`); the defaults below come from the stress test in the
+next section.
+
+| Check | When | Score; default warning / critical | Estimated impact |
+|---|---|---|---|
+| Low or high yield (A) | order received | \|actual − forecast\| / 98 % band; above 1 / from 1.5 | missing packs × forecast EKP |
+| Unexpected waste or part deviation (B) | butchery posted | largest \|actual − forecast\| / 98 % band of the six parts; above 1.5 / from 2. Less waste than expected does not count (no loss; by-products are recorded apart) | extra waste kg × carcass price |
+| Purchase price increase | receipt saved | % above the mean of the product's last three purchase lines; above 10 / from 25 | price difference × quantity |
+| Recalled, blocked or expired lot sold at the POS | sync refuses the sale | rule: always critical, one alert per sale (UUIDv7), also when the phone retries | – |
+| Shortage in a stock count | count saved | shortage value at lot cost; above 10 € / from 100 €; always critical for a recalled or blocked lot | shortage × lot cost |
+
+A supervisor marks an alert **under review**, then closes it as a **real problem** or a **false
+alarm** (note required, `audit_log` entry). A problem found by hand that no alert flagged is
+recorded as a **missed problem** (`POST /alerts/missed`) against the check that should have caught
+it. Per check the dashboard shows precision = real / (real + false alarms) and recall = real /
+(real + missed), each with its 95 % Wilson interval: 8 real problems out of 10 closed alerts is
+49–94 %, which is why a handful of reviews is reported as a count, not as an accuracy.
+
+### Calibrating the live alerts without field data
+
+No business data set was provided, so the field accuracy of a threshold cannot be measured yet.
+What can be measured, and is ([`calibrate_live_alerts.py`](../ml-engine/calibrate_live_alerts.py),
+`artifacts/ali/live_alert_calibration.json`), is how each rule behaves **if the data look like the
+synthetic generator's assumptions**. The yield rules use the same data, champion predictions and
+fault injection as `anomaly_ali.py` (6 % of records, 30 rounds, time-split test period only; the
+band comes from the training residuals) and the score the API computes. Every threshold is
+reported, so a business can choose by its own alarm budget. The defaults follow one: **at most one
+false alarm per 100 records, then the highest recall**.
+
+Production yield (A), 302 test orders, injected drops of 1.5–6 yield points plus natural faults:
+
+| Warning at × 98 % band | Precision | Recall | False alarms / 100 orders |
+|---|---|---|---|
+| 0.75 | 0.87 | 0.79 | 0.97 |
+| **1.0 (default)** | **1.00** | **0.64** | **0.00** |
+| 1.25 | 1.00 | 0.44 | 0.00 |
+| 1.5 (default critical) | 1.00 | 0.32 | 0.00 |
+| 2.0 | 1.00 | 0.06 | 0.00 |
+
+At 1.0 the rule catches 4 % of 1.5–3 point drops, 42 % of 3–4.5 and 88 % above 4.5. A critical
+threshold of 2 bands (the first choice) would have marked only 6 % of faults critical; 1.5 marks the
+large ones. 0.75 stays inside the budget too and catches more; 1.0 was kept because field noise is
+likely larger than the generator's and the alert then matches the `anomaly` flag exactly.
+
+Butchery (B), 500 test carcasses, 1–4 % of the carcass moved to waste or to another part:
+
+| Warning at × 98 % band | Precision | Recall | False alarms / 100 carcasses |
+|---|---|---|---|
+| 1.0 | 0.36 | 0.86 | **9.24** |
+| 1.25 | 0.77 | 0.76 | 1.33 |
+| **1.5 (default)** | **0.91** | **0.64** | **0.39** |
+| 2.0 (default critical) | 1.00 | 0.39 | 0.00 |
+
+The first default (1.0) failed this test: each part alone leaves its 98 % band on 2 % of normal
+carcasses, but the alert looks at six parts, so one of them does on roughly 1 − 0.98⁶ ≈ 11 %
+(observed 9 per 100). This multiple-comparison effect is why the default is now 1.5, which is in
+line with the batch Mahalanobis detector (precision 0.95, recall 0.66). At 1.5 the rule catches 64 %
+of 1–2 % shifts and all shifts above 3 %. The per-part `anomaly` flag in `/ai/summary` stays at the
+98 % band: it is a statement about one part, not an alert.
+
+Purchase price: a price series from the generator cannot judge a threshold, because its noise
+(1.5 % per purchase) is our own assumption. The test therefore reports the false alarms per 100
+clean purchases **as a function of the business's price volatility** (weekly purchases over two
+years, trend, season, three suppliers), and the share of single price jumps caught:
+
+| Price noise per purchase | 10 % (default) | 15 % | 20 % | 10–20 % jumps caught at 10 % |
+|---|---|---|---|---|
+| 1.5 % | 0.01 | 0.00 | 0.00 | 91 % |
+| 3 % | 0.53 | 0.02 | 0.00 | 87 % |
+| 5 % | 5.21 | 0.76 | 0.11 | 84 % |
+| 8 % | 15.1 | 6.42 | 2.28 | 65 % |
+
+10 % suits a business whose prices move by about 3 % or less between purchases; at 5 % it should be
+15 %, at 8 % around 25 %. The **Alerts → thresholds** section shows the volatility actually observed
+in the recorded purchases (95th percentile of the increases, share above the threshold), so this
+choice can be made from the business's own invoices as soon as there are some. Stock-count
+shortages and refused POS sales are measured facts, not predictions: their thresholds are a
+materiality decision and have no precision to test.
+
+What this does **not** show: how often the rules are right on real operations. That needs the
+reviews and missed problems above, collected over a pilot, and is the next step once real records
+exist. Public price series (carcass and meat market prices) could replace the assumed price noise
+before that; this was not done.
 
 ## Physical consistency (butchery)
 
@@ -222,6 +311,29 @@ runs inside the Go API without Python:
    written next to the forecast, and `is_anomaly` is set if the actual is outside the 98 % band.
    The dashboard (*Production*, *AI*) and the phone (*Yield forecasts*) show it like the seeded rows.
 
+Before saving, *Preview* in the order form sends the same request with `dry_run`: every check and
+the forecast run, the transaction is rolled back, and the expected packages and EKP with their
+80 % interval are shown at the moment the order is decided. Saving stores the same forecast.
+
+## Synthetic test and recorded data are kept apart
+
+The *AI* tab has two sections. The chart and the MAE / MAPE table are the **synthetic test**
+(held-out dates of the generated history). The second section is forecast vs actual on the
+**records in this database**, each labelled with its origin (`ml_prediction.data_origin`):
+
+| Origin | Meaning |
+|---|---|
+| `SEED` | written by `database-mysql/seed.sql` (URT-2026-045, URT-2026-046, PRC-2026-001); the forecasts were added after the outcome |
+| `DEMO` | entered through the app in a demo deployment (the default) |
+| `FIELD` | entered while the API runs with `DATA_ORIGIN=FIELD`; still **not verified** |
+
+The app cannot verify a record: that needs the source document, a verifier, independence from
+training and a forecast frozen before the outcome, checked by `ml-engine/audit_field.py` (see
+[ai/field-audit-2026-10-30.md](ai/field-audit-2026-10-30.md)). The tab and the *Overview* box
+therefore state "verified field samples: 0" while there are no field records, and "verified
+outside the app" once there are. The *Overview* AI box is titled *synthetic test* and is not
+coloured as a success.
+
 Evidence: `TestLiveYieldMatchesTheTrainedModel` compares the Go evaluation with sklearn on 33 golden
 rows (both seeded orders and 31 held-out orders, incl. missing fat %, summer months and 500 g packs):
 all within 1e-9. URT-2026-045 gives the seeded 84.6 packages and EKP 18.2172 EUR.
@@ -252,9 +364,22 @@ interval but inside the 98 % band.
 
 ## Limitations
 
-- Both studies now run in the Go API. Study B's live expected-weight column in the entry form
-  is still pending. `TestIntegrationButcheryLiveForecast` verifies preview, dry run, stored
+- Both studies now run in the Go API. Study B's expected weight per part is shown live in the
+  dashboard's butchery form, and the API verdict (model, baseline, actual, interval, anomaly) after
+  *Check* or *Save*. The forecast stored with a posted operation (`ml_prediction`) is computed in
+  the same request as the actuals, so it cannot serve as prospective field evidence.
+  `TestIntegrationButcheryLiveForecast` verifies preview, dry run, stored
   model/baseline/actual/interval/anomaly rows, `/ai/summary`, and rollback on a failed record.
+- A butchery forecast becomes prospective only when it is frozen before the parts are weighed
+  (*Freeze forecast* in the form, `POST /ai/forecast/butchery/freeze`). The frozen forecast never
+  changes, carries the server time, and a carcass gets one, made before it is cut; the posted
+  operation links to it and is compared with it. The field audit export then uses only the frozen
+  forecast for that operation, and `audit_field.py` excludes one frozen for another input weight.
+  Freezing is a precondition, not proof: the scale record must still show the weighing came after
+  `frozen_at`, and no verified field operation exists yet. The form only offers the freeze while no
+  part weight is entered; it cannot know whether the parts were already weighed.
+  `TestIntegrationFrozenButcheryForecast`, `database-mysql/tests/test_frozen_butchery_forecast.py`
+  and the e2e test *a forecast frozen before weighing…* cover it.
 - A production extrapolation with a nonpositive lower package bound or output exceeding the
   material mass is withheld (`forecast` null/absent). This guard prevents invalid arithmetic;
   it is not an estimate of accuracy outside the training distribution.

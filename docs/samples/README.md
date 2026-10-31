@@ -2,6 +2,7 @@
 
 Exported from the running API on the clean demo seed by `./scripts/export-samples.sh`
 (which restores the seed afterwards). Field meanings: [docs/API.md](../API.md).
+Dates follow the seed's original calendar (20.09–15.10.2026), not the day of the export.
 
 | File | Content |
 |---|---|

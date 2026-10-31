@@ -24,6 +24,10 @@ USE food_intel;
 -- kurulsun olaylar geçmişte, SKT'ler anlamlı kalır (ör. 2 günlük kıyma dün dolmuş olur).
 -- Orijinal takvimi görmek için: SET @seed_shift := 0;
 SET @seed_shift := DATEDIFF(CURRENT_DATE, '2026-10-16');
+-- Üretim prosedürleri ve sevkiyat tetikleyicisi hareket zamanını NOW(3) ile yazar. Seed onları
+-- çağırmadan önce oturum saatini belge zamanına çeker (SET TIMESTAMP), sonra DEFAULT'a döndürür;
+-- yoksa kabul ve sevkiyatlar yükleme anına düşer, belge tarihli transfer ve satışlardan sonra
+-- sıralanır ve stok hareketleri raporunda bakiye eksiye iner.
 
 INSERT INTO unit_of_measure (code, name, is_weight) VALUES
   ('KG', 'Kilogram', TRUE), ('PAKET', 'Paket', FALSE), ('ADET', 'Adet', FALSE);
@@ -96,13 +100,16 @@ SELECT 'URT-2026-045', 'EXTERNAL', s.id, p.id, 85.000, 5.5000, 5, DATE_ADD('2026
        'Hammadde işletmeye aittir; fason yalnızca işçilik/hizmet faturası keser.'
   FROM supplier s, product p WHERE s.code = 'FAS-01' AND p.sku = 'MM-SUCUK-1KG';
 
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-02 08:30:00', INTERVAL @seed_shift DAY));
 CALL sp_production_add_input('URT-2026-045', 'ET-2026-001', 100.000, 'ANA-DEPO', 'FASON-01');
 CALL sp_production_add_input('URT-2026-045', 'BAH-2026-001',   2.000, 'ANA-DEPO', 'FASON-01');
 CALL sp_production_add_input('URT-2026-045', 'BAG-2026-001',   5.000, 'ANA-DEPO', 'FASON-01');
 
 -- 85 paket teslim, hizmet faturası 85 × 5,50 = 467,50 €
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-06 14:00:00', INTERVAL @seed_shift DAY));
 CALL sp_production_complete('URT-2026-045', 85.000, 'SUC-2026-045', DATE_ADD('2026-10-06', INTERVAL @seed_shift DAY), DATE_ADD('2027-01-04', INTERVAL @seed_shift DAY),
                             'FASON-01', 'ANA-DEPO', 'FAS-FTR-2026-045');
+SET TIMESTAMP = DEFAULT;
 
 -- ---------------------------------------------------------------------
 -- Görev 3: marketlere sevkiyat 30 / 25 / 30
@@ -114,14 +121,19 @@ SELECT 'SVK-2026-202', c.id, w.id, DATE_ADD('2026-10-07', INTERVAL @seed_shift D
 INSERT INTO shipment (shipment_no, customer_id, from_warehouse_id, ship_date, delivery_note_no)
 SELECT 'SVK-2026-203', c.id, w.id, DATE_ADD('2026-10-08', INTERVAL @seed_shift DAY), 'IRS-SVK-203' FROM customer c, warehouse w WHERE c.code='MKT-C' AND w.code='ANA-DEPO';
 
--- satır eklenince tetikleyici SHIPMENT stok hareketini yazar
+-- satır eklenince tetikleyici SHIPMENT stok hareketini yazar (zamanı: sevk günü 09:00)
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-07 09:00:00', INTERVAL @seed_shift DAY));
 INSERT INTO shipment_line (shipment_id, lot_id, qty, unit_price)
 SELECT s.id, l.id, x.qty, 24.9000
   FROM (SELECT 'SVK-2026-201' AS shipment_no, 30.000 AS qty
-        UNION ALL SELECT 'SVK-2026-202', 25.000
-        UNION ALL SELECT 'SVK-2026-203', 30.000) x
+        UNION ALL SELECT 'SVK-2026-202', 25.000) x
   JOIN shipment s ON s.shipment_no = x.shipment_no
   JOIN lot l ON l.lot_no = 'SUC-2026-045';
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-08 09:00:00', INTERVAL @seed_shift DAY));
+INSERT INTO shipment_line (shipment_id, lot_id, qty, unit_price)
+SELECT s.id, l.id, 30.000, 24.9000 FROM shipment s, lot l
+ WHERE s.shipment_no = 'SVK-2026-203' AND l.lot_no = 'SUC-2026-045';
+SET TIMESTAMP = DEFAULT;
 
 -- =====================================================================
 -- Demo seed'i: zorunlu senaryonun ötesindeki ilişkileri göstermek için
@@ -159,10 +171,12 @@ SELECT prl.lot_id, r.warehouse_id, 'PURCHASE_IN', prl.qty, prl.unit_price, 'purc
 INSERT INTO production_order (order_no, order_type, subcontractor_id, product_id, planned_qty, service_unit_price, drying_days, order_date)
 SELECT 'URT-2026-046', 'EXTERNAL', s.id, p.id, 85.000, 5.5000, 6, DATE_ADD('2026-10-10', INTERVAL @seed_shift DAY)
   FROM supplier s, product p WHERE s.code = 'FAS-01' AND p.sku = 'MM-SUCUK-1KG';
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-10 08:30:00', INTERVAL @seed_shift DAY));
 CALL sp_production_add_input('URT-2026-046', 'ET-2026-002', 100.000, 'ANA-DEPO', 'FASON-01');
 CALL sp_production_add_input('URT-2026-046', 'BAH-2026-001',   2.000, 'ANA-DEPO', 'FASON-01');
 CALL sp_production_add_input('URT-2026-046', 'BAG-2026-001',   5.000, 'ANA-DEPO', 'FASON-01');
 -- bu partide verim düşük: 83 paket (miktar farkı -2; daha yağsız et + 6 gün kurutma)
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-14 14:00:00', INTERVAL @seed_shift DAY));
 CALL sp_production_complete('URT-2026-046', 83.000, 'SUC-2026-046', DATE_ADD('2026-10-14', INTERVAL @seed_shift DAY), DATE_ADD('2027-01-12', INTERVAL @seed_shift DAY),
                             'FASON-01', 'ANA-DEPO', 'FAS-FTR-2026-046');
 
@@ -170,10 +184,12 @@ INSERT INTO shipment (shipment_no, customer_id, from_warehouse_id, ship_date, de
 SELECT 'SVK-2026-214', c.id, w.id, DATE_ADD('2026-10-15', INTERVAL @seed_shift DAY), 'IRS-SVK-214' FROM customer c, warehouse w WHERE c.code='MKT-B'  AND w.code='ANA-DEPO';
 INSERT INTO shipment (shipment_no, customer_id, from_warehouse_id, ship_date, delivery_note_no)
 SELECT 'SVK-2026-215', c.id, w.id, DATE_ADD('2026-10-15', INTERVAL @seed_shift DAY), 'IRS-SVK-215' FROM customer c, warehouse w WHERE c.code='TOP-01' AND w.code='ANA-DEPO';
+SET TIMESTAMP = UNIX_TIMESTAMP(DATE_ADD('2026-10-15 09:00:00', INTERVAL @seed_shift DAY));
 INSERT INTO shipment_line (shipment_id, lot_id, qty, unit_price)
 SELECT s.id, l.id, x.qty, 24.9000
   FROM (SELECT 'SVK-2026-214' AS shipment_no, 40.000 AS qty UNION ALL SELECT 'SVK-2026-215', 30.000) x
   JOIN shipment s ON s.shipment_no = x.shipment_no JOIN lot l ON l.lot_no = 'SUC-2026-046';
+SET TIMESTAMP = DEFAULT;
 
 -- 5 paket mağazaya transfer (POS)
 INSERT INTO stock_movement (lot_id, warehouse_id, movement_type, qty, unit_cost, ref_type, moved_at, note)
@@ -335,3 +351,6 @@ INSERT INTO ml_prediction (task, model_name, model_version, ref_type, ref_id, ta
 INSERT INTO ml_prediction (task, model_name, model_version, ref_type, ref_id, target_name, predicted_value, actual_value) VALUES ('BUTCHERY_YIELD', 'baseline_hist_mean', 'baseline-1', 'butchery_operation', (SELECT id FROM butchery_operation WHERE op_no = 'PRC-2026-001'), 'kiyma_kg', 3.9682, (SELECT SUM(o.weight_kg) FROM butchery_output o JOIN product p ON p.id = o.product_id WHERE o.operation_id = (SELECT id FROM butchery_operation WHERE op_no = 'PRC-2026-001') AND p.sku = 'KZ-KIYMA'));
 INSERT INTO ml_prediction (task, model_name, model_version, ref_type, ref_id, target_name, predicted_value, actual_value) VALUES ('BUTCHERY_YIELD', 'baseline_hist_mean', 'baseline-1', 'butchery_operation', (SELECT id FROM butchery_operation WHERE op_no = 'PRC-2026-001'), 'fire_kg', 2.9236, (SELECT SUM(o.weight_kg) FROM butchery_output o JOIN product p ON p.id = o.product_id WHERE o.operation_id = (SELECT id FROM butchery_operation WHERE op_no = 'PRC-2026-001') AND p.sku = 'KZ-FIRE'));
 -- END ai-report
+
+-- Buraya kadarki tahminlerin hepsi seed örneğidir; uygulamanın yazdıkları DEMO ya da FIELD olur.
+UPDATE ml_prediction SET data_origin = 'SEED';

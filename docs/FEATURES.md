@@ -1,4 +1,4 @@
-# FEFO, recovery follow-up and assessment PDF
+# FEFO, recovery, assessment PDF, alerts, mass balance and stock count
 
 ## Use
 
@@ -35,14 +35,55 @@ instead of an incomplete PDF. Turkish text and the Euro sign use bundled OFL Not
 no customer data is sent to a PDF service. Default scenario IDs can be changed through the
 API query parameters documented in API.md.
 
+**Dashboard → Alerts and the sidebar bell:** the bell counts open alerts (with the critical
+ones), lots with 3 days or less to expiry and active recalls; each line opens its tab. Alerts are
+written when a record is saved: a received order outside the yield forecast's 98 % band, a
+butchery with unexpected waste or part weights, a purchase price more than 10 % above the
+product's last three purchases, and a POS sale of a recalled or expired lot that the server
+refused (the goods may already be with a customer). **Review** with the supervisor PIN marks an
+alert under review or closes it as a real problem or a false alarm (note required, audited).
+Closed alerts give the observed precision and confirmed loss per check. Alerts never change
+stock, cost or lot status. To see one in the demo, record a spice receipt above 24.00 €/kg in
+*Purchases*, or receive an order with far fewer packs than forecast.
+
+**Alerts → accuracy and thresholds:** per check, the reviewed alerts give the precision and the
+problems found by hand (**Record a missed problem**) the recall, each with its 95 % interval. The
+**Alert thresholds** section lists each check's warning and critical value, what that value did in
+the synthetic stress test (precision, recall, false alarms per 100 records; for prices, by price
+volatility, next to the volatility observed in the recorded purchases) and who changed it last.
+**Change** shows the test result for a typed value before saving with the supervisor PIN; new alerts
+use it, older ones keep the values they were graded with. Background: docs/AI.md, *Calibrating the
+live alerts without field data*.
+
+**Dashboard → Trace & recall → Lot flow and Mass balance (forward trace):** the diagram draws the
+lots by depth, the customers by distribution tier and the stock, till, waste and gap positions,
+each arrow with its recorded quantity; a lot box opens the lot card, hover highlights its arrows.
+The mass balance shows, per lot, where its quantity went (used in other lots, shipped, sold,
+wasted, returned, in stock) and the undocumented gap, plus the final positions per unit: for
+ET-2026-001, 100 kg went into URT-2026-045 and the 85 packs are at Markets A/B/C. A stock-count
+write-off appears as a gap, because no document says where the goods went. The assessment PDF
+carries the same table.
+
+**Dashboard → Lots & stock → Count stock:** pick a warehouse, type what is on the shelf for the
+lots you counted (empty rows are not counted), give a reason for every difference and save with
+the supervisor PIN. Each difference is booked as a count adjustment; *Recent counts* lists the
+counts with their differences, reasons and value. If a lot's stock changed after the list was
+opened (e.g. a till sale synced), the count is refused and the list refreshes. A shortage above
+10 € (or any shortage of a recalled lot) raises an alert.
+
 ## Existing installation
 
-New installations use schema.sql normally. Existing databases need the two additive/procedure
+New installations use schema.sql normally. Existing databases need the additive/procedure
 migrations, preserving records (Git Bash example from the repository root):
 
 ```bash
 docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261029_production_dispatch_guard.sql
 docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261029_recall_followup.sql
+docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261030_prediction_origin.sql
+docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261030_alert_inbox.sql
+docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261030_stock_count.sql
+docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261031_alert_rules.sql
+docker compose exec -T mysql mysql -uroot -pban --comments < database-mysql/migrations/20261031_frozen_butchery_forecast.sql
 docker compose up -d --build api-go web-react
 ```
 

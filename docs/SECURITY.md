@@ -29,7 +29,8 @@ Boundaries: Android POS ↔ Go API (HTTP, signed batches), browser dashboard ↔
 
 **Go API** (`api-go/security.go`, `controllers/session.go`, `controllers/auth_controller.go`, `controllers/sync_controller.go`)
 - Write endpoints behind `RequireOperator`: `POST /recall`, `/movements/*`, `/rework`,
-  `/production`, `/purchases`, `/butchery/operations`, `/sync/register-key`. Reads stay open for
+  `/production`, `/purchases`, `/butchery/operations`, `/ai/forecast/butchery/freeze`,
+  `/sync/register-key`. Reads stay open for
   the dashboard and the POS.
 - `POST /auth/session`: PIN → token `base64url(user|exp).HMAC-SHA256`, secret from
   `API_SESSION_SECRET` (≥ 32 bytes) or random per process; constant-time comparison.

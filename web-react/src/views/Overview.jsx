@@ -2,7 +2,10 @@ import React from 'react';
 import { useApi } from '../lib/api';
 import { useLang } from '../lib/i18n';
 import { Async, Group, Kpi, Page } from '../lib/ui';
+import { FieldSampleKpi } from './AI';
 import AssessmentReportButton from './AssessmentReportButton';
+import { SOON_DAYS } from './LotPanel';
+import { lotBuckets } from './Lots';
 
 const ORDER = 'URT-2026-045';
 
@@ -80,15 +83,17 @@ export default function Overview({ onOpen }) {
           </Async>
         </Group>
 
-        <Group title={t('ov_stock')}>
+        <Group title={t('ov_stock')} aside={<button className="btn-text" onClick={() => onOpen('lots')}>›</button>}>
           <Async result={lots} rows={2}>
             {(rows) => {
-              const inStock = (rows || []).filter((r) => r.qty > 0);
-              const value = inStock.reduce((a, r) => a + r.stock_value, 0);
+              const b = lotBuckets(rows);
+              const value = b.stock.reduce((a, r) => a + r.stock_value, 0);
+              const soon = new Set(b.soon.map((r) => r.lot_no)).size;
               return (
                 <div className="kpi-row">
-                  <Kpi label={t('ov_lots_in_stock')} value={fmt.num(new Set(inStock.map((r) => r.lot_no)).size, 0)} />
+                  <Kpi label={t('ov_lots_in_stock')} value={fmt.num(new Set(b.stock.map((r) => r.lot_no)).size, 0)} />
                   <Kpi label={t('ov_stock_value')} value={fmt.money(value)} />
+                  <Kpi label={t('lots_soon', SOON_DAYS)} value={fmt.num(soon, 0)} tone={soon ? 'warn' : 'ok'} />
                 </div>
               );
             }}
@@ -120,7 +125,8 @@ export default function Overview({ onOpen }) {
               const b = s.metrics.find((x) => x.task === 'PRODUCTION' && x.target === 'actual_qty' && x.model === s.baseline);
               return m ? (
                 <div className="kpi-row">
-                  <Kpi label={t('ov_ai_packages')} value={fmt.pct(m.mape_pct)} sub={t('ov_vs_baseline', fmt.pct(b?.mape_pct))} tone="ok" />
+                  <Kpi label={t('ov_ai_packages')} value={fmt.pct(m.mape_pct)} sub={t('ov_vs_baseline', fmt.pct(b?.mape_pct))} />
+                  <FieldSampleKpi records={s.records} />
                 </div>
               ) : (
                 <p className="empty">{t('noData')}</p>

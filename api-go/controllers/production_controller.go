@@ -11,7 +11,8 @@ import (
 
 type CostBreakdownLineDto struct {
 	OrderNo     string  `json:"order_no"`
-	LotNo       string  `json:"lot_no"`
+	LotNo       string  `json:"lot_no"`               // the material lot, or the service invoice number
+	IsService   bool    `json:"is_service,omitempty"` // the subcontractor's service line
 	CostElement string  `json:"cost_element"`
 	Qty         float64 `json:"qty"`
 	UomCode     string  `json:"uom_code"`
@@ -107,7 +108,7 @@ func (c *ProductionController) ListOrders(w http.ResponseWriter, r *http.Request
 	}
 	defer rows.Close()
 
-	var orders []ProductionOrderDto
+	orders := []ProductionOrderDto{} // [] rather than null when nothing matches
 	for rows.Next() {
 		var o ProductionOrderDto
 		if err := rows.Scan(
@@ -266,7 +267,7 @@ func (c *ProductionController) CalculateOrCompleteProduction(w http.ResponseWrit
 func (c *ProductionController) fetchCostBreakdown(r *http.Request, orderNo string) []CostBreakdownLineDto {
 	bRows, err := c.db.QueryContext(
 		r.Context(),
-		`SELECT order_no, COALESCE(lot_no, ''), cost_element, qty, uom_code, unit_cost, amount
+		`SELECT order_no, COALESCE(lot_no, ''), cost_element, qty, uom_code, unit_cost, amount, sort_key = 2
 		 FROM v_production_cost_breakdown
 		 WHERE order_no = ?
 		 ORDER BY sort_key ASC, lot_no ASC`,
@@ -282,7 +283,7 @@ func (c *ProductionController) fetchCostBreakdown(r *http.Request, orderNo strin
 		var line CostBreakdownLineDto
 		if err := bRows.Scan(
 			&line.OrderNo, &line.LotNo, &line.CostElement,
-			&line.Qty, &line.UomCode, &line.UnitCost, &line.Amount,
+			&line.Qty, &line.UomCode, &line.UnitCost, &line.Amount, &line.IsService,
 		); err == nil {
 			lines = append(lines, line)
 		}

@@ -4,6 +4,8 @@ package controllers
 // breed, weight and history, evaluated in Go from the exported ml-engine champion (one Ridge per
 // share, clipped at 0.1 % and rescaled to 100 %, so parts + waste = input weight). The dashboard
 // shows it while a butchery is entered; a posted operation stores forecast and recorded weights.
+// Frozen before the parts are weighed (POST /ai/forecast/butchery/freeze), the forecast is kept
+// unchanged in butchery_forecast and the posted operation is compared with it.
 
 import (
 	"context"
@@ -160,17 +162,18 @@ func applyButcheryActuals(fc *ButcheryForecastDto, outs []ButcheryOutputRequest)
 
 func storeButcheryForecast(ctx context.Context, q sqlRunner, opID int64, fc *ButcheryForecastDto) error {
 	const ins = `INSERT INTO ml_prediction (task, model_name, model_version, ref_type, ref_id, target_name,
-	             predicted_value, actual_value, interval_low, interval_high, interval_level, is_anomaly)
-	             VALUES ('BUTCHERY_YIELD', ?, ?, 'butchery_operation', ?, ?, ?, ?, ?, ?, ?, ?)`
+	             predicted_value, actual_value, interval_low, interval_high, interval_level, is_anomaly, data_origin)
+	             VALUES ('BUTCHERY_YIELD', ?, ?, 'butchery_operation', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	origin := predictionOrigin()
 	for _, p := range fc.Parts {
 		target := p.Part + "_kg"
 		if _, err := q.ExecContext(ctx, ins, championModel, fc.ModelVersion, opID, target, p.Kg, p.ActualKg,
-			p.KgLow, p.KgHigh, fc.IntervalLevel, p.Anomaly); err != nil {
+			p.KgLow, p.KgHigh, fc.IntervalLevel, p.Anomaly, origin); err != nil {
 			return err
 		}
 		if p.BaselineKg != nil {
 			if _, err := q.ExecContext(ctx, ins, baselineModel, "baseline-1", opID, target, *p.BaselineKg, p.ActualKg,
-				nil, nil, nil, nil); err != nil {
+				nil, nil, nil, nil, origin); err != nil {
 				return err
 			}
 		}
@@ -197,6 +200,125 @@ func loadCarcass(ctx context.Context, q sqlRunner, lotNo string) (in ButcheryInp
 	return in, productType, err
 }
 
+// FrozenButcheryDto is a forecast stored before the parts of its carcass were weighed. It never
+// changes; the operation that cuts the carcass links to it once (op_no).
+type FrozenButcheryDto struct {
+	FrozenAt      time.Time            `json:"frozen_at"`
+	FrozenBy      string               `json:"frozen_by"`
+	InputWeightKg float64              `json:"input_weight_kg"`
+	OpDate        string               `json:"op_date"`
+	OperatorName  string               `json:"operator_name,omitempty"`
+	OpNo          string               `json:"op_no,omitempty"`
+	InputMatches  *bool                `json:"input_matches,omitempty"` // in a butchery result: frozen for the operation's input kg
+	Forecast      *ButcheryForecastDto `json:"forecast"`
+	id            int64
+}
+
+// ButcheryForecastResponse is the live forecast and, if the carcass has one, its frozen forecast.
+type ButcheryForecastResponse struct {
+	*ButcheryForecastDto
+	Frozen *FrozenButcheryDto `json:"frozen,omitempty"`
+}
+
+// loadFrozenButchery returns the frozen forecast of a carcass lot, or nil if it has none.
+func loadFrozenButchery(ctx context.Context, q sqlRunner, lotNo, species string) (*FrozenButcheryDto, error) {
+	f := &FrozenButcheryDto{}
+	var opDate time.Time
+	var operator, opNo sql.NullString
+	err := q.QueryRowContext(ctx,
+		`SELECT bf.id, bf.frozen_at, bf.frozen_by, bf.input_weight_kg, bf.op_date, bf.operator_name, bo.op_no
+		 FROM butchery_forecast bf JOIN lot l ON l.id = bf.input_lot_id
+		 LEFT JOIN butchery_operation bo ON bo.id = bf.operation_id
+		 WHERE l.lot_no = ?`, lotNo).
+		Scan(&f.id, &f.FrozenAt, &f.FrozenBy, &f.InputWeightKg, &opDate, &operator, &opNo)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	f.OpDate, f.OperatorName, f.OpNo = opDate.Format("2006-01-02"), operator.String, opNo.String
+	fc := &ButcheryForecastDto{Model: championModel, Species: species, WeightKg: f.InputWeightKg}
+	index := map[string]int{}
+	for _, t := range butcheryForecastModel.Targets {
+		part := strings.TrimSuffix(t, "_pct")
+		index[part+"_kg"] = len(fc.Parts)
+		fc.Parts = append(fc.Parts, ButcheryPartForecastDto{Part: part, SKU: cutSKU[species][part]})
+	}
+	rows, err := q.QueryContext(ctx,
+		`SELECT model_name, model_version, target_name, predicted_value, interval_low, interval_high, interval_level, anomaly_band_kg
+		 FROM butchery_forecast_part WHERE forecast_id = ?`, f.id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var model, version, target string
+		var pred float64
+		var lo, hi, level, band sql.NullFloat64
+		if err := rows.Scan(&model, &version, &target, &pred, &lo, &hi, &level, &band); err != nil {
+			return nil, err
+		}
+		i, ok := index[target]
+		if !ok {
+			continue
+		}
+		p := &fc.Parts[i]
+		switch model {
+		case championModel:
+			fc.ModelVersion, fc.IntervalLevel = version, level.Float64
+			p.Kg, p.KgLow, p.KgHigh, p.band98 = pred, lo.Float64, hi.Float64, band.Float64
+			p.SharePct = round(100*pred/f.InputWeightKg, 3)
+		case baselineModel:
+			p.BaselineKg = ptr(pred)
+		}
+	}
+	f.Forecast = fc
+	return f, rows.Err()
+}
+
+// ButcheryFreezeRequest is the carcass as it goes onto the cutting table.
+type ButcheryFreezeRequest struct {
+	InputLotNo    string  `json:"input_lot_no"`
+	InputWeightKg float64 `json:"input_weight_kg"`
+	OpDate        string  `json:"op_date"`
+	OperatorName  string  `json:"operator_name"`
+}
+
+func validateForecastInput(lotNo string, weight float64, weightErr error, date string) fieldErrors {
+	fe := fieldErrors{}
+	if lotNo == "" {
+		fe["input_lot_no"] = "required"
+	}
+	if weightErr != nil || math.IsNaN(weight) || math.IsInf(weight, 0) || weight <= 0 || weight > 500 {
+		fe["input_weight_kg"] = "0 < kg <= 500"
+	}
+	if !validDate(date) {
+		fe["op_date"] = "YYYY-MM-DD"
+	}
+	return fe
+}
+
+// carcassForecast loads the carcass, checks it is one and forecasts it; false: the error is written.
+func carcassForecast(w http.ResponseWriter, r *http.Request, q sqlRunner, lotNo string, weight float64, date, operator string) (*ButcheryForecastDto, ButcheryInputs, bool) {
+	in, ptype, err := loadCarcass(r.Context(), q, lotNo)
+	if err == sql.ErrNoRows {
+		writeAPIError(w, r, http.StatusNotFound, "LOT_NOT_FOUND", "lot "+lotNo)
+		return nil, in, false
+	}
+	if err != nil {
+		writeDBError(w, r, err)
+		return nil, in, false
+	}
+	if ptype != "CARCASS" {
+		writeAPIError(w, r, http.StatusUnprocessableEntity, "INVALID_INPUT", fieldErrors{"input_lot_no": "must be a carcass lot"})
+		return nil, in, false
+	}
+	in.CarcassWeightKg, in.OperatorCode = weight, operator
+	in.OpDate, _ = time.Parse("2006-01-02", date)
+	return forecastButchery(in, butcheryForecastModel), in, true
+}
+
 // ButcheryForecast handles GET /ai/forecast/butchery?input_lot_no=&input_weight_kg=[&op_date=&operator_name=]
 func (c *AIController) ButcheryForecast(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -205,35 +327,102 @@ func (c *AIController) ButcheryForecast(w http.ResponseWriter, r *http.Request) 
 	}
 	q := r.URL.Query()
 	weight, err := strconv.ParseFloat(strings.Replace(q.Get("input_weight_kg"), ",", ".", 1), 64)
-	fe := fieldErrors{}
-	if q.Get("input_lot_no") == "" {
-		fe["input_lot_no"] = "required"
-	}
-	if err != nil || math.IsNaN(weight) || math.IsInf(weight, 0) || weight <= 0 || weight > 500 {
-		fe["input_weight_kg"] = "0 < kg <= 500"
-	}
 	date := nonEmpty(q.Get("op_date"), time.Now().Format("2006-01-02"))
-	if !validDate(date) {
-		fe["op_date"] = "YYYY-MM-DD"
-	}
-	if len(fe) > 0 {
+	if fe := validateForecastInput(q.Get("input_lot_no"), weight, err, date); len(fe) > 0 {
 		writeAPIError(w, r, http.StatusUnprocessableEntity, "INVALID_INPUT", fe)
 		return
 	}
-	in, ptype, err := loadCarcass(r.Context(), c.db, q.Get("input_lot_no"))
-	if err == sql.ErrNoRows {
-		writeAPIError(w, r, http.StatusNotFound, "LOT_NOT_FOUND", "lot "+q.Get("input_lot_no"))
+	fc, in, ok := carcassForecast(w, r, c.db, q.Get("input_lot_no"), weight, date, q.Get("operator_name"))
+	if !ok {
 		return
 	}
+	frozen, err := loadFrozenButchery(r.Context(), c.db, q.Get("input_lot_no"), in.Species)
 	if err != nil {
 		writeDBError(w, r, err)
 		return
 	}
-	if ptype != "CARCASS" {
-		writeAPIError(w, r, http.StatusUnprocessableEntity, "INVALID_INPUT", fieldErrors{"input_lot_no": "must be a carcass lot"})
+	writeJSON(w, ButcheryForecastResponse{fc, frozen})
+}
+
+// FreezeButcheryForecast handles POST /ai/forecast/butchery/freeze: stores the forecast of a
+// carcass before its parts are weighed, so it can later count as a forecast made before the
+// outcome. One per carcass, never changed: 409 FORECAST_FROZEN if the carcass already has one,
+// 409 FORECAST_TOO_LATE once it is cut.
+func (c *AIController) FreezeButcheryForecast(w http.ResponseWriter, r *http.Request) {
+	var req ButcheryFreezeRequest
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-	in.CarcassWeightKg, in.OperatorCode = weight, q.Get("operator_name")
-	in.OpDate, _ = time.Parse("2006-01-02", date)
-	writeJSON(w, forecastButchery(in, butcheryForecastModel))
+	req.InputLotNo = strings.TrimSpace(req.InputLotNo)
+	req.OpDate = nonEmpty(req.OpDate, time.Now().Format("2006-01-02"))
+	if fe := validateForecastInput(req.InputLotNo, req.InputWeightKg, nil, req.OpDate); len(fe) > 0 {
+		writeAPIError(w, r, http.StatusUnprocessableEntity, "INVALID_INPUT", fe)
+		return
+	}
+	ctx := r.Context()
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	defer tx.Rollback()
+	// Lock the carcass first, like POST /butchery/operations: a freeze and a posting of the same
+	// carcass run one after the other, and the trigger then sees a posting that came first.
+	var lotID int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM lot WHERE lot_no = ? FOR UPDATE`, req.InputLotNo).Scan(&lotID); err == sql.ErrNoRows {
+		writeAPIError(w, r, http.StatusNotFound, "LOT_NOT_FOUND", "lot "+req.InputLotNo)
+		return
+	} else if err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	fc, in, ok := carcassForecast(w, r, tx, req.InputLotNo, req.InputWeightKg, req.OpDate, strings.TrimSpace(req.OperatorName))
+	if !ok {
+		return
+	}
+	if existing, err := loadFrozenButchery(ctx, tx, req.InputLotNo, in.Species); err != nil {
+		writeDBError(w, r, err)
+		return
+	} else if existing != nil {
+		writeAPIError(w, r, http.StatusConflict, "FORECAST_FROZEN", existing)
+		return
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO butchery_forecast (input_lot_id, input_weight_kg, op_date, operator_name, frozen_by, data_origin)
+		 VALUES (?, ?, ?, NULLIF(?, ''), ?, ?)`,
+		lotID, req.InputWeightKg, req.OpDate, in.OperatorCode, nonEmpty(OperatorFrom(ctx), "api"), predictionOrigin())
+	if err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	id, _ := res.LastInsertId()
+	const ins = `INSERT INTO butchery_forecast_part (forecast_id, model_name, model_version, target_name,
+	             predicted_value, interval_low, interval_high, interval_level, anomaly_band_kg)
+	             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	for _, p := range fc.Parts {
+		if _, err := tx.ExecContext(ctx, ins, id, championModel, fc.ModelVersion, p.Part+"_kg", p.Kg, p.KgLow, p.KgHigh,
+			fc.IntervalLevel, round(p.band98, 4)); err != nil {
+			writeDBError(w, r, err)
+			return
+		}
+		if p.BaselineKg != nil {
+			if _, err := tx.ExecContext(ctx, ins, id, baselineModel, "baseline-1", p.Part+"_kg", *p.BaselineKg,
+				nil, nil, nil, nil); err != nil {
+				writeDBError(w, r, err)
+				return
+			}
+		}
+	}
+	frozen, err := loadFrozenButchery(ctx, tx, req.InputLotNo, in.Species)
+	if err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeDBError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, frozen)
 }

@@ -5,6 +5,7 @@ pip install -r ml-engine/requirements.txt
 python ml-engine/generator_ali.py         # data/train_task4a_ali.csv (1500), data/train_task4b_ali.csv (2500)
 python ml-engine/train_model_ali.py       # artifacts/ali/metrics.json, oof_ali_*.csv, *_model.joblib (~1 dk)
 python ml-engine/anomaly_ali.py           # artifacts/ali/anomaly_metrics.json, anomaly_detector.joblib (~10 sn)
+python ml-engine/calibrate_live_alerts.py # canlı API uyarı eşiklerinin sentetik stres testi -> artifacts/ali/ + api-go aimodel (~20 sn)
 python ml-engine/predict_ali.py production ml-engine/data/seed_cases_production.csv
 python ml-engine/predict_ali.py butchery   ml-engine/data/seed_cases_butchery.csv --emit-sql /tmp/pred.sql
 python ml-engine/predict_ali.py production ml-engine/data/demo_cases_anomaly_production.csv --alerts --demo

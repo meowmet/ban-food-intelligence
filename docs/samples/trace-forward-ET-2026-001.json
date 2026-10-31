@@ -98,5 +98,66 @@
       "qty": 10,
       "uom_code": "PAKET"
     }
-  ]
+  ],
+  "mass_balance": {
+    "lines": [
+      {
+        "lot_no": "ET-2026-001",
+        "product_name": "Dana et (sucukluk)",
+        "uom_code": "KG",
+        "status": "ACTIVE",
+        "declared_qty": 100,
+        "used_in_lots": 100,
+        "shipped": 0,
+        "sold": 0,
+        "wasted": 0,
+        "returned": 0,
+        "count_diff": 0,
+        "in_stock": 0,
+        "at_subcontractor": 0,
+        "accounted": 100,
+        "unexplained": 0,
+        "accounted_pct": 100
+      },
+      {
+        "lot_no": "SUC-2026-045",
+        "product_name": "Narin Sucuk 1 kg",
+        "uom_code": "PAKET",
+        "status": "ACTIVE",
+        "declared_qty": 85,
+        "used_in_lots": 0,
+        "shipped": 85,
+        "sold": 0,
+        "wasted": 0,
+        "returned": 0,
+        "count_diff": 0,
+        "in_stock": 0,
+        "at_subcontractor": 0,
+        "accounted": 85,
+        "unexplained": 0,
+        "accounted_pct": 100
+      }
+    ],
+    "totals": [
+      {
+        "uom_code": "KG",
+        "at_customers": 0,
+        "sold": 0,
+        "wasted": 0,
+        "in_stock": 0,
+        "at_subcontractor": 0,
+        "unexplained": 0
+      },
+      {
+        "uom_code": "PAKET",
+        "at_customers": 85,
+        "sold": 0,
+        "wasted": 0,
+        "in_stock": 0,
+        "at_subcontractor": 0,
+        "unexplained": 0
+      }
+    ],
+    "balanced": true
+  }
 }

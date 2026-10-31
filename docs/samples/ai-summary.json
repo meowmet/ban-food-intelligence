@@ -1,7 +1,7 @@
 {
   "model": "ali_ridge",
   "baseline": "baseline_hist_mean",
-  "data_note": "Models are trained on synthetic, anonymised history (ml-engine/generator_ali.py). Metrics are measured on the latest 20% of dates (time split). Small and synthetic data: indicative only.",
+  "data_note": "Models are trained on synthetic, anonymised history (ml-engine/generator_ali.py). Metrics are measured on the latest 20% of dates (time split). Small and synthetic data: indicative only. Comparisons are records in this database by origin: SEED (seed.sql), DEMO (entered in a demo deployment), FIELD (entered with DATA_ORIGIN=FIELD, not verified). Verified field performance is measured outside the app (ml-engine/audit_field.py).",
   "metrics": [
     {
       "task": "PRODUCTION",
@@ -141,6 +141,7 @@
       "task": "PRODUCTION",
       "ref_no": "URT-2026-045",
       "target": "actual_qty",
+      "origin": "SEED",
       "actual": 85,
       "model_pred": 84.6,
       "model_dev": 0.4,
@@ -148,12 +149,18 @@
       "baseline_pred": 83.3492,
       "baseline_dev": 1.6508,
       "baseline_dev_pct": 1.94,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 83.2,
+      "interval_high": 86,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "PRODUCTION",
       "ref_no": "URT-2026-045",
       "target": "ekp",
+      "origin": "SEED",
       "actual": 18.1588,
       "model_pred": 18.2172,
       "model_dev": -0.0584,
@@ -161,12 +168,16 @@
       "baseline_pred": 18.4095,
       "baseline_dev": -0.2507,
       "baseline_dev_pct": -1.38,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 18.0116,
+      "interval_high": 18.4327,
+      "interval_level": 0.8
     },
     {
       "task": "PRODUCTION",
       "ref_no": "URT-2026-046",
       "target": "actual_qty",
+      "origin": "SEED",
       "actual": 83,
       "model_pred": 82.8,
       "model_dev": 0.2,
@@ -174,12 +185,18 @@
       "baseline_pred": 83.3492,
       "baseline_dev": -0.3492,
       "baseline_dev_pct": -0.42,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 81.4,
+      "interval_high": 84.3,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "PRODUCTION",
       "ref_no": "URT-2026-046",
       "target": "ekp",
+      "origin": "SEED",
       "actual": 18.6446,
       "model_pred": 18.6692,
       "model_dev": -0.0246,
@@ -187,12 +204,16 @@
       "baseline_pred": 18.5895,
       "baseline_dev": 0.0551,
       "baseline_dev_pct": 0.3,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 18.4419,
+      "interval_high": 18.9029,
+      "interval_level": 0.8
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "but_kg",
+      "origin": "SEED",
       "actual": 6.5,
       "model_pred": 6.794,
       "model_dev": -0.294,
@@ -200,12 +221,18 @@
       "baseline_pred": 6.559,
       "baseline_dev": -0.059,
       "baseline_dev_pct": -0.91,
-      "model_closer_than_baseline": false
+      "model_closer_than_baseline": false,
+      "interval_low": 6.565,
+      "interval_high": 7.023,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": true
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "sirt_kg",
+      "origin": "SEED",
       "actual": 3.5,
       "model_pred": 3.632,
       "model_dev": -0.132,
@@ -213,12 +240,18 @@
       "baseline_pred": 3.5305,
       "baseline_dev": -0.0305,
       "baseline_dev_pct": -0.87,
-      "model_closer_than_baseline": false
+      "model_closer_than_baseline": false,
+      "interval_low": 3.445,
+      "interval_high": 3.819,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "omuz_kg",
+      "origin": "SEED",
       "actual": 5,
       "model_pred": 5.001,
       "model_dev": -0.001,
@@ -226,12 +259,18 @@
       "baseline_pred": 5.0158,
       "baseline_dev": -0.0158,
       "baseline_dev_pct": -0.32,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 4.755,
+      "interval_high": 5.248,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "kaburga_kg",
+      "origin": "SEED",
       "actual": 3,
       "model_pred": 2.957,
       "model_dev": 0.043,
@@ -239,12 +278,18 @@
       "baseline_pred": 3.0029,
       "baseline_dev": -0.0029,
       "baseline_dev_pct": -0.1,
-      "model_closer_than_baseline": false
+      "model_closer_than_baseline": false,
+      "interval_low": 2.77,
+      "interval_high": 3.145,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "kiyma_kg",
+      "origin": "SEED",
       "actual": 4,
       "model_pred": 4.008,
       "model_dev": -0.008,
@@ -252,12 +297,18 @@
       "baseline_pred": 3.9682,
       "baseline_dev": 0.0318,
       "baseline_dev_pct": 0.8,
-      "model_closer_than_baseline": true
+      "model_closer_than_baseline": true,
+      "interval_low": 3.763,
+      "interval_high": 4.253,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": false
     },
     {
       "task": "BUTCHERY",
       "ref_no": "PRC-2026-001",
       "target": "fire_kg",
+      "origin": "SEED",
       "actual": 3,
       "model_pred": 2.607,
       "model_dev": 0.393,
@@ -265,7 +316,17 @@
       "baseline_pred": 2.9236,
       "baseline_dev": 0.0764,
       "baseline_dev_pct": 2.55,
-      "model_closer_than_baseline": false
+      "model_closer_than_baseline": false,
+      "interval_low": 2.387,
+      "interval_high": 2.827,
+      "interval_level": 0.8,
+      "anomaly": false,
+      "outside_interval": true
     }
-  ]
+  ],
+  "records": {
+    "DEMO": 0,
+    "FIELD": 0,
+    "SEED": 3
+  }
 }

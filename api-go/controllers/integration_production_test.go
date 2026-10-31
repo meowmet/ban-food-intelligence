@@ -60,6 +60,29 @@ func TestIntegrationProductionOrderWithLiveForecast(t *testing.T) {
 		t.Fatalf("lot listed twice: want 422, got %d", code)
 	}
 
+	// Preview (dry_run): the same checks and the forecast, then rolled back. An unknown lot gives
+	// the same 404 as saving would; a valid order gives its forecast and writes nothing.
+	badPreview := bad
+	badPreview.DryRun = true
+	if code, body := call(t, e.ProductionOrder, "POST", "/production/orders", badPreview); code != http.StatusNotFound {
+		t.Fatalf("preview with unknown input lot: want 404, got %d %s", code, body)
+	}
+	preview := order
+	preview.DryRun = true
+	pcode, pbody := call(t, e.ProductionOrder, "POST", "/production/orders", preview)
+	var pre ProductionOrderResultDto
+	_ = json.Unmarshal(pbody, &pre)
+	if pcode != http.StatusOK || pre.Status != "DRY_RUN" || !near(pre.MaterialCost, 1076) || pre.Forecast == nil {
+		t.Fatalf("preview: %d %s", pcode, pbody)
+	}
+	var written int
+	_ = db.QueryRow(`SELECT (SELECT COUNT(*) FROM production_order WHERE order_no = ?)
+		+ (SELECT COUNT(*) FROM stock_movement sm JOIN lot l ON l.id = sm.lot_id
+		   WHERE l.lot_no IN (?, ?, ?) AND sm.movement_type <> 'PURCHASE_IN')`, order.OrderNo, meat, spice, casing).Scan(&written)
+	if written != 0 {
+		t.Fatalf("preview wrote %d rows (order or movements)", written)
+	}
+
 	// The order: material at the subcontractor, cost snapshot, forecast stored next to the baseline.
 	code, body := call(t, e.ProductionOrder, "POST", "/production/orders", order)
 	if code != http.StatusCreated {
@@ -75,10 +98,14 @@ func TestIntegrationProductionOrderWithLiveForecast(t *testing.T) {
 		fc.BaselinePackages == nil || math.Abs(*fc.EKP-(1076+fc.Packages*5.5)/fc.Packages) > 0.01 {
 		t.Fatalf("forecast not plausible: %s", body)
 	}
+	if fc.Packages != pre.Forecast.Packages || *fc.EKP != *pre.Forecast.EKP {
+		t.Fatalf("saved forecast %.1f / %.4f differs from the preview %.1f / %.4f", fc.Packages, *fc.EKP, pre.Forecast.Packages, *pre.Forecast.EKP)
+	}
+	// stored as DEMO: the test API runs without DATA_ORIGIN=FIELD
 	_ = db.QueryRow(`SELECT COUNT(*) FROM ml_prediction mp JOIN production_order po ON po.id = mp.ref_id
-		WHERE mp.ref_type = 'production_order' AND po.order_no = ? AND mp.actual_value IS NULL`, order.OrderNo).Scan(&orders)
+		WHERE mp.ref_type = 'production_order' AND po.order_no = ? AND mp.actual_value IS NULL AND mp.data_origin = 'DEMO'`, order.OrderNo).Scan(&orders)
 	if orders != 4 {
-		t.Fatalf("want 4 stored predictions (model + baseline, packages + EKP), got %d", orders)
+		t.Fatalf("want 4 stored DEMO predictions (model + baseline, packages + EKP), got %d", orders)
 	}
 	_ = db.QueryRow(`SELECT COUNT(*) FROM stock_balance sb JOIN lot l ON l.id = sb.lot_id JOIN warehouse w ON w.id = sb.warehouse_id
 		WHERE l.lot_no IN (?, ?, ?) AND w.code = 'FASON-01' AND sb.qty > 0`, meat, spice, casing).Scan(&meatLeft)
@@ -114,13 +141,20 @@ func TestIntegrationProductionOrderWithLiveForecast(t *testing.T) {
 	code, body = call(t, NewAIController(db).Summary, "GET", "/ai/summary", nil)
 	var sum AISummaryDto
 	_ = json.Unmarshal(body, &sum)
-	found := false
+	found, seedLabelled := false, false
 	for _, c := range sum.Comparisons {
 		if c.RefNo == order.OrderNo && c.Target == "actual_qty" {
-			found = c.Actual != nil && *c.Actual == 84 && c.ModelPred != nil && c.BaselinePred != nil && c.Anomaly != nil
+			found = c.Actual != nil && *c.Actual == 84 && c.ModelPred != nil && c.BaselinePred != nil && c.Anomaly != nil && c.Origin == "DEMO"
+		}
+		if c.RefNo == "URT-2026-045" && c.Target == "actual_qty" {
+			seedLabelled = c.Origin == "SEED"
 		}
 	}
-	if code != 200 || !found {
-		t.Fatalf("/ai/summary misses the live forecast of %s", order.OrderNo)
+	if code != 200 || !found || !seedLabelled {
+		t.Fatalf("/ai/summary misses the live DEMO forecast of %s or the SEED label of URT-2026-045", order.OrderNo)
+	}
+	// the three seeded documents (URT-2026-045, URT-2026-046, PRC-2026-001); no field data in a test run
+	if sum.Records["SEED"] != 3 || sum.Records["DEMO"] < 1 || sum.Records["FIELD"] != 0 {
+		t.Fatalf("records by origin: %v", sum.Records)
 	}
 }

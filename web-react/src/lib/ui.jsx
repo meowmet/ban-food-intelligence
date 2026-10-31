@@ -128,6 +128,7 @@ export function Segmented({ options, value, onChange, label }) {
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
           role="tab"
           aria-selected={o.value === value}
           className={o.value === value ? 'active' : ''}

@@ -162,10 +162,10 @@ python -m venv .venv-ml && .venv-ml/bin/pip install -r ml-engine/requirements.tx
 | Spec inconsistencies explained (287.50 vs 351.00; 22 vs 25 kg) | `DECLARED_COST_MISMATCH`, `WEIGHT_IMBALANCE` (rejected record PRC-2026-000) vs posted PRC-2026-001 |
 | Supplier, lot, date, quantity, expiry on every receipt | `lot.supplier_id/supplier_lot_no/lot_date/expiry_date` |
 | Many-to-many lot relations with quantities | `lot_link(parent, child, qty_consumed, qty_produced)` for production, butchery and rework |
-| Transfer, sale, return, rework, waste per lot | `POST /movements/transfer|return|waste`, `POST /rework`, POS sales, shipments |
+| Transfer, sale, return, rework, waste per lot | `POST /movements/transfer|return|waste`, `POST /rework`, POS sales, `POST /shipments` (dashboard *Shipments*) |
 | Forward trace: lots, stock, shipments, buyers | `sp_trace_forward`, `GET /trace/{lot}?direction=forward` |
 | Backward trace: raw lots, suppliers, production orders | `sp_trace_backward`, `GET /trace/{lot}?direction=backward` |
-| Recall screen blocks products; per-customer quantity, shipment, contact list; tier 2 only if recorded | `sp_recall_initiate`, `sp_recall_report`, `GET/POST /recall`, `GET /recall/contacts.csv`, dashboard *Trace & recall*; `second_tier` RECORDED / NOT_RECORDED |
+| Recall screen blocks products; per-customer quantity, shipment, contact list; tier 2 only if recorded | `sp_recall_initiate`, `sp_recall_report`, `GET/POST /recall`, `GET /recall/contacts.csv`, dashboard *Trace & recall*; `second_tier` RECORDED / NOT_RECORDED; a customer's onward delivery is recorded with `POST /shipments` (`from_customer_code`), capped at what it received |
 | Kotlin: each sale line's lot, quantity and stock movement stored; recalled lots blocked | SQLite outbox + `sale_line.stock_movement_id`; Android blocks recalled lots online and from the offline cache; recall stop with supervisor unlock |
 | AI A and B with baseline and error measurement | [docs/AI.md](docs/AI.md), `GET /ai/summary`, dashboard *AI*, Android *Lots → Yield forecasts*; A is forecast live in the API for every new order |
 | Traceability never from AI | trace/recall use only `lot_link`/`shipment_line`/`sale_line` |
